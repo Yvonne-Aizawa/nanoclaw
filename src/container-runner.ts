@@ -16,6 +16,7 @@ import {
   IDLE_TIMEOUT,
   TIMEZONE,
 } from './config.js';
+import { readEnvFile } from './env.js';
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
 import { logger } from './logger.js';
 import {
@@ -226,6 +227,13 @@ function buildContainerArgs(
     '-e',
     `ANTHROPIC_BASE_URL=http://${CONTAINER_HOST_GATEWAY}:${CREDENTIAL_PROXY_PORT}`,
   );
+
+  // Pass Brave Search API key if configured
+  const braveSecrets = readEnvFile(['BRAVE_API_KEY']);
+  const braveApiKey = process.env.BRAVE_API_KEY || braveSecrets.BRAVE_API_KEY;
+  if (braveApiKey) {
+    args.push('-e', `BRAVE_API_KEY=${braveApiKey}`);
+  }
 
   // Mirror the host's auth method with a placeholder value.
   // API key mode: SDK sends x-api-key, proxy replaces with real key.
