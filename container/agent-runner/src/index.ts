@@ -442,6 +442,7 @@ async function runQuery(
               CALDAV_URL: process.env.CALDAV_URL,
               CALDAV_USERNAME: process.env.CALDAV_USERNAME || '',
               CALDAV_PASSWORD: process.env.CALDAV_PASSWORD || '',
+              TZ: process.env.TZ || 'Europe/Amsterdam',
             },
           },
         } : {}),
