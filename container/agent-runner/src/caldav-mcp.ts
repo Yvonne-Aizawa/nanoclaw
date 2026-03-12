@@ -7,6 +7,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createDAVClient, DAVCalendar, DAVCalendarObject } from 'tsdav';
+import { RRule, RRuleSet, rrulestr } from 'rrule';
 import { z } from 'zod';
 
 const CALDAV_URL = process.env.CALDAV_URL!;
@@ -40,21 +41,62 @@ interface CalEvent {
   description: string;
   location: string;
   url?: string;
+  isRecurring?: boolean;
 }
 
-function parseVEvents(icalStr: string): CalEvent[] {
+function parseVEvents(icalStr: string, rangeStart?: Date, rangeEnd?: Date): CalEvent[] {
   const events: CalEvent[] = [];
   const eventBlocks = icalStr.match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/g) || [];
   for (const block of eventBlocks) {
     // Handle folded lines (lines continued with a space/tab)
     const unfolded = block.replace(/\r?\n[ \t]/g, '');
+
+    const rawStart = unfolded.match(/DTSTART(?:;[^:]*)?:([^\r\n]*)/m)?.[1] || '';
+    const rawEnd = unfolded.match(/DTEND(?:;[^:]*)?:([^\r\n]*)/m)?.[1] || '';
+    const rruleStr = parseIcalField(unfolded, 'RRULE');
+    const uid = parseIcalField(unfolded, 'UID');
+    const summary = parseIcalField(unfolded, 'SUMMARY');
+    const description = parseIcalField(unfolded, 'DESCRIPTION').replace(/\\n/g, '\n').replace(/\\,/g, ',');
+    const location = parseIcalField(unfolded, 'LOCATION');
+
+    if (rruleStr && rangeStart && rangeEnd) {
+      // Expand recurring event — find occurrences within the queried range
+      try {
+        const dtstart = parseIcalDate(rawStart);
+        const originalStart = new Date(dtstart);
+        const duration = rawEnd
+          ? new Date(parseIcalDate(rawEnd)).getTime() - originalStart.getTime()
+          : 0;
+
+        const rule = rrulestr(`DTSTART:${rawStart}\nRRULE:${rruleStr}`);
+        const occurrences = rule.between(rangeStart, rangeEnd, true);
+
+        for (const occ of occurrences) {
+          const occEnd = duration > 0 ? new Date(occ.getTime() + duration) : occ;
+          events.push({
+            uid,
+            summary,
+            start: occ.toISOString(),
+            end: occEnd.toISOString(),
+            description,
+            location,
+            isRecurring: true,
+          });
+        }
+        continue;
+      } catch {
+        // Fall through to plain parse if rrule expansion fails
+      }
+    }
+
     events.push({
-      uid: parseIcalField(unfolded, 'UID'),
-      summary: parseIcalField(unfolded, 'SUMMARY'),
-      start: parseIcalDate(parseIcalField(unfolded, 'DTSTART(?:;[^:]*)?') || unfolded.match(/DTSTART(?:;[^:]*)?:([^\r\n]*)/m)?.[1] || ''),
-      end: parseIcalDate(parseIcalField(unfolded, 'DTEND(?:;[^:]*)?') || unfolded.match(/DTEND(?:;[^:]*)?:([^\r\n]*)/m)?.[1] || ''),
-      description: parseIcalField(unfolded, 'DESCRIPTION').replace(/\\n/g, '\n').replace(/\\,/g, ','),
-      location: parseIcalField(unfolded, 'LOCATION'),
+      uid,
+      summary,
+      start: parseIcalDate(rawStart),
+      end: parseIcalDate(rawEnd),
+      description,
+      location,
+      isRecurring: !!rruleStr,
     });
   }
   return events;
@@ -152,7 +194,7 @@ server.tool(
         });
         for (const obj of objects) {
           if (!obj.data) continue;
-          const events = parseVEvents(obj.data);
+          const events = parseVEvents(obj.data, startDate, endDate);
           for (const ev of events) {
             allEvents.push({ ...ev, calendar: String(cal.displayName || cal.url || '') });
           }
@@ -165,7 +207,7 @@ server.tool(
 
       allEvents.sort((a, b) => a.start.localeCompare(b.start));
       const formatted = allEvents.map((e) => {
-        let line = `• ${e.start}${e.end ? ` → ${e.end}` : ''}: ${e.summary}`;
+        let line = `• ${e.start}${e.end ? ` → ${e.end}` : ''}: ${e.summary}${e.isRecurring ? ' (recurring)' : ''}`;
         if (e.location) line += ` @ ${e.location}`;
         if (e.description) line += `\n  ${e.description.slice(0, 100)}`;
         line += `\n  [UID: ${e.uid}] [Calendar: ${e.calendar}]`;
