@@ -18,17 +18,20 @@ const TIMEZONE = process.env.TZ || 'Europe/Amsterdam';
 
 function formatLocalDate(isoOrRaw: string): string {
   if (!isoOrRaw) return '';
-  // All-day events (YYYY-MM-DD) — no time conversion needed
+  // All-day events (YYYY-MM-DD) — no conversion needed
   if (/^\d{4}-\d{2}-\d{2}$/.test(isoOrRaw)) return isoOrRaw;
   try {
     const d = new Date(isoOrRaw);
     if (isNaN(d.getTime())) return isoOrRaw;
-    return new Intl.DateTimeFormat('en-GB', {
+    const parts = new Intl.DateTimeFormat('en-CA', {
       timeZone: TIMEZONE,
       year: 'numeric', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit',
       hour12: false,
-    }).format(d).replace(',', '');
+    }).formatToParts(d);
+    const p: Record<string, string> = {};
+    for (const part of parts) p[part.type] = part.value;
+    return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;
   } catch {
     return isoOrRaw;
   }
