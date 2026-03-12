@@ -7,7 +7,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createDAVClient, DAVCalendar, DAVCalendarObject } from 'tsdav';
-import { RRule, RRuleSet, rrulestr } from 'rrule';
+import pkg from 'rrule';
+const { rrulestr } = pkg;
 import { z } from 'zod';
 
 const CALDAV_URL = process.env.CALDAV_URL!;
