@@ -128,7 +128,7 @@ server.tool(
 
 server.tool(
   'get_events',
-  'Get calendar events within a date range. Dates should be ISO format (e.g. 2026-03-01 or 2026-03-01T09:00:00Z).',
+  'Get calendar events within a date range. The range is half-open [start, end) — end is exclusive. To get all events on a single day, set start=that day and end=next day (e.g. start=2026-03-13, end=2026-03-14). Dates should be ISO format (e.g. 2026-03-13 or 2026-03-13T09:00:00Z).',
   {
     start: z.string().describe('Start of range (ISO date/datetime)'),
     end: z.string().describe('End of range (ISO date/datetime)'),
