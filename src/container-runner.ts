@@ -229,10 +229,20 @@ function buildContainerArgs(
   );
 
   // Pass Brave Search API key if configured
-  const braveSecrets = readEnvFile(['BRAVE_API_KEY']);
-  const braveApiKey = process.env.BRAVE_API_KEY || braveSecrets.BRAVE_API_KEY;
+  const extraSecrets = readEnvFile(['BRAVE_API_KEY', 'CALDAV_URL', 'CALDAV_USERNAME', 'CALDAV_PASSWORD']);
+  const braveApiKey = process.env.BRAVE_API_KEY || extraSecrets.BRAVE_API_KEY;
   if (braveApiKey) {
     args.push('-e', `BRAVE_API_KEY=${braveApiKey}`);
+  }
+
+  // Pass CalDAV credentials if configured
+  const caldavUrl = process.env.CALDAV_URL || extraSecrets.CALDAV_URL;
+  if (caldavUrl) {
+    args.push('-e', `CALDAV_URL=${caldavUrl}`);
+    const caldavUser = process.env.CALDAV_USERNAME || extraSecrets.CALDAV_USERNAME || '';
+    const caldavPass = process.env.CALDAV_PASSWORD || extraSecrets.CALDAV_PASSWORD || '';
+    if (caldavUser) args.push('-e', `CALDAV_USERNAME=${caldavUser}`);
+    if (caldavPass) args.push('-e', `CALDAV_PASSWORD=${caldavPass}`);
   }
 
   // Mirror the host's auth method with a placeholder value.

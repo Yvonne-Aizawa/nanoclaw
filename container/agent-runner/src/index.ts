@@ -432,6 +432,17 @@ async function runQuery(
             },
           },
         } : {}),
+        ...(process.env.CALDAV_URL ? {
+          caldav: {
+            command: 'node',
+            args: [path.join(path.dirname(mcpServerPath), 'caldav-mcp.js')],
+            env: {
+              CALDAV_URL: process.env.CALDAV_URL,
+              CALDAV_USERNAME: process.env.CALDAV_USERNAME || '',
+              CALDAV_PASSWORD: process.env.CALDAV_PASSWORD || '',
+            },
+          },
+        } : {}),
       },
       hooks: {
         PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],
