@@ -14,6 +14,25 @@ import { z } from 'zod';
 const CALDAV_URL = process.env.CALDAV_URL!;
 const CALDAV_USERNAME = process.env.CALDAV_USERNAME!;
 const CALDAV_PASSWORD = process.env.CALDAV_PASSWORD!;
+const TIMEZONE = process.env.TZ || 'Europe/Amsterdam';
+
+function formatLocalDate(isoOrRaw: string): string {
+  if (!isoOrRaw) return '';
+  // All-day events (YYYY-MM-DD) — no time conversion needed
+  if (/^\d{4}-\d{2}-\d{2}$/.test(isoOrRaw)) return isoOrRaw;
+  try {
+    const d = new Date(isoOrRaw);
+    if (isNaN(d.getTime())) return isoOrRaw;
+    return new Intl.DateTimeFormat('en-GB', {
+      timeZone: TIMEZONE,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit',
+      hour12: false,
+    }).format(d).replace(',', '');
+  } catch {
+    return isoOrRaw;
+  }
+}
 
 // Simple iCal field parser — extracts top-level properties and VEVENT blocks
 function parseIcalField(ical: string, field: string): string {
@@ -208,7 +227,9 @@ server.tool(
 
       allEvents.sort((a, b) => a.start.localeCompare(b.start));
       const formatted = allEvents.map((e) => {
-        let line = `• ${e.start}${e.end ? ` → ${e.end}` : ''}: ${e.summary}${e.isRecurring ? ' (recurring)' : ''}`;
+        const start = formatLocalDate(e.start);
+        const end = formatLocalDate(e.end);
+        let line = `• ${start}${end ? ` → ${end}` : ''}: ${e.summary}${e.isRecurring ? ' (recurring)' : ''}`;
         if (e.location) line += ` @ ${e.location}`;
         if (e.description) line += `\n  ${e.description.slice(0, 100)}`;
         line += `\n  [UID: ${e.uid}] [Calendar: ${e.calendar}]`;
