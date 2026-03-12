@@ -407,7 +407,9 @@ async function runQuery(
         'TeamCreate', 'TeamDelete', 'SendMessage',
         'TodoWrite', 'ToolSearch', 'Skill',
         'NotebookEdit',
-        'mcp__nanoclaw__*'
+        'mcp__nanoclaw__*',
+        'mcp__brave__*',
+        'mcp__caldav__*',
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
