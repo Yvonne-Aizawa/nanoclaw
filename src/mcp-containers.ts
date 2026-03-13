@@ -5,7 +5,7 @@
  * Secrets stay inside these containers and are never passed to the agent container.
  */
 
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 
 import { loadAppConfig } from './app-config.js';
 import { CONTAINER_RUNTIME_BIN, hostGatewayArgs } from './container-runtime.js';
@@ -112,7 +112,8 @@ function startContainer(spec: McpContainerSpec): void {
     spec.image,
   ];
 
-  execSync(`${CONTAINER_RUNTIME_BIN} ${args.join(' ')}`, { stdio: 'pipe' });
+  // Use execFileSync (not execSync) so env values with spaces aren't shell-split
+  execFileSync(CONTAINER_RUNTIME_BIN, args, { stdio: 'pipe' });
 }
 
 async function waitReady(port: number, timeoutMs = 10000): Promise<void> {
