@@ -314,10 +314,19 @@ export class TelegramChannel implements Channel {
           }
         }
       } catch (err) {
-        logger.warn({ err }, 'Failed to download Telegram photo, sending placeholder');
+        logger.warn(
+          { err },
+          'Failed to download Telegram photo, sending placeholder',
+        );
       }
 
-      this.opts.onChatMetadata(chatJid, timestamp, chatName, 'telegram', isGroup);
+      this.opts.onChatMetadata(
+        chatJid,
+        timestamp,
+        chatName,
+        'telegram',
+        isGroup,
+      );
       this.opts.onMessage(chatJid, {
         id: ctx.message.message_id.toString(),
         chat_jid: chatJid,
