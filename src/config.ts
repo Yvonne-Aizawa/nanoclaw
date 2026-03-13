@@ -73,6 +73,5 @@ export const TRIGGER_PATTERN = new RegExp(
 export const TIMEZONE =
   process.env.TZ || Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-export const TELEGRAM_BOT_POOL = appConfig.telegram.bot_swarm_tokens.filter(
-  Boolean,
-);
+export const TELEGRAM_BOT_POOL =
+  appConfig.telegram.bot_swarm_tokens.filter(Boolean);

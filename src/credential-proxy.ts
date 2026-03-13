@@ -32,9 +32,7 @@ export function startCredentialProxy(
   const aiConfig = getActiveAiConfig();
   const authMode: AuthMode = aiConfig.type === 'oauth' ? 'oauth' : 'api-key';
 
-  const upstreamUrl = new URL(
-    aiConfig.endpoint || 'https://api.anthropic.com',
-  );
+  const upstreamUrl = new URL(aiConfig.endpoint || 'https://api.anthropic.com');
   const isHttps = upstreamUrl.protocol === 'https:';
   const makeRequest = isHttps ? httpsRequest : httpRequest;
   const basePath = upstreamUrl.pathname.replace(/\/$/, '');
@@ -53,7 +51,10 @@ export function startCredentialProxy(
             if (parsed.model !== undefined) {
               if (overrideModel) parsed.model = overrideModel;
               logger.info(
-                { model: parsed.model, endpoint: upstreamUrl.origin + basePath },
+                {
+                  model: parsed.model,
+                  endpoint: upstreamUrl.origin + basePath,
+                },
                 'Proxy: model in use',
               );
               body = Buffer.from(JSON.stringify(parsed));
