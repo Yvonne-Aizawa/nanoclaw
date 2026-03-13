@@ -238,6 +238,7 @@ function buildContainerArgs(
     'CALDAV_USERNAME',
     'CALDAV_PASSWORD',
   ]);
+
   const braveApiKey = process.env.BRAVE_API_KEY || extraSecrets.BRAVE_API_KEY;
   if (braveApiKey) {
     args.push('-e', `BRAVE_API_KEY=${braveApiKey}`);

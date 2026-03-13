@@ -32,24 +32,39 @@ export function startCredentialProxy(
     'CLAUDE_CODE_OAUTH_TOKEN',
     'ANTHROPIC_AUTH_TOKEN',
     'ANTHROPIC_BASE_URL',
+    'ANTHROPIC_MODEL',
   ]);
 
   const authMode: AuthMode = secrets.ANTHROPIC_API_KEY ? 'api-key' : 'oauth';
-  const oauthToken =
-    secrets.CLAUDE_CODE_OAUTH_TOKEN || secrets.ANTHROPIC_AUTH_TOKEN;
+  const oauthToken = secrets.CLAUDE_CODE_OAUTH_TOKEN;
 
   const upstreamUrl = new URL(
     secrets.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
   );
   const isHttps = upstreamUrl.protocol === 'https:';
   const makeRequest = isHttps ? httpsRequest : httpRequest;
+  const basePath = upstreamUrl.pathname.replace(/\/$/, '');
 
   return new Promise((resolve, reject) => {
     const server = createServer((req, res) => {
       const chunks: Buffer[] = [];
       req.on('data', (c) => chunks.push(c));
       req.on('end', () => {
-        const body = Buffer.concat(chunks);
+        // Rewrite model in request body if ANTHROPIC_MODEL is set and this is a messages request
+        let body = Buffer.concat(chunks);
+        const overrideModel = secrets.ANTHROPIC_MODEL;
+        if (overrideModel && req.url?.includes('/messages') && body.length > 0) {
+          try {
+            const parsed = JSON.parse(body.toString());
+            if (parsed.model !== undefined) {
+              parsed.model = overrideModel;
+              body = Buffer.from(JSON.stringify(parsed));
+            }
+          } catch {
+            // Not JSON or no model field — leave body unchanged
+          }
+        }
+
         const headers: Record<string, string | number | string[] | undefined> =
           {
             ...(req.headers as Record<string, string>),
@@ -62,15 +77,17 @@ export function startCredentialProxy(
         delete headers['keep-alive'];
         delete headers['transfer-encoding'];
 
-        if (authMode === 'api-key') {
+        if (secrets.ANTHROPIC_AUTH_TOKEN && !secrets.CLAUDE_CODE_OAUTH_TOKEN) {
+          // Bearer token mode: always inject Authorization header (e.g. z.ai / non-Anthropic endpoints)
+          delete headers['x-api-key'];
+          headers['authorization'] = `Bearer ${secrets.ANTHROPIC_AUTH_TOKEN}`;
+        } else if (authMode === 'api-key') {
           // API key mode: inject x-api-key on every request
           delete headers['x-api-key'];
           headers['x-api-key'] = secrets.ANTHROPIC_API_KEY;
         } else {
           // OAuth mode: replace placeholder Bearer token with the real one
           // only when the container actually sends an Authorization header
-          // (exchange request + auth probes). Post-exchange requests use
-          // x-api-key only, so they pass through without token injection.
           if (headers['authorization']) {
             delete headers['authorization'];
             if (oauthToken) {
@@ -79,11 +96,13 @@ export function startCredentialProxy(
           }
         }
 
+        const upstreamPath = basePath + req.url;
+
         const upstream = makeRequest(
           {
             hostname: upstreamUrl.hostname,
             port: upstreamUrl.port || (isHttps ? 443 : 80),
-            path: req.url,
+            path: upstreamPath,
             method: req.method,
             headers,
           } as RequestOptions,
@@ -120,6 +139,10 @@ export function startCredentialProxy(
 
 /** Detect which auth mode the host is configured for. */
 export function detectAuthMode(): AuthMode {
-  const secrets = readEnvFile(['ANTHROPIC_API_KEY']);
-  return secrets.ANTHROPIC_API_KEY ? 'api-key' : 'oauth';
+  const secrets = readEnvFile(['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN']);
+  // ANTHROPIC_AUTH_TOKEN = Bearer token for non-Anthropic endpoints (e.g. z.ai).
+  // Use api-key mode so the container skips the OAuth exchange flow.
+  // OAuth takes priority when CLAUDE_CODE_OAUTH_TOKEN is explicitly set.
+  if (secrets.CLAUDE_CODE_OAUTH_TOKEN) return 'oauth';
+  return secrets.ANTHROPIC_API_KEY || secrets.ANTHROPIC_AUTH_TOKEN ? 'api-key' : 'oauth';
 }
