@@ -113,6 +113,22 @@ function writeOutput(output: ContainerOutput): void {
   console.log(OUTPUT_END_MARKER);
 }
 
+const CALDAV_LOG_FILE = '/tmp/caldav-debug.log';
+function flushCaldavLog(): void {
+  try {
+    if (!fs.existsSync(CALDAV_LOG_FILE)) return;
+    const lines = fs.readFileSync(CALDAV_LOG_FILE, 'utf8').trim();
+    if (lines) {
+      for (const line of lines.split('\n')) {
+        process.stderr.write(`[caldav] ${line}\n`);
+      }
+    }
+    fs.unlinkSync(CALDAV_LOG_FILE);
+  } catch {
+    // ignore
+  }
+}
+
 function log(message: string): void {
   console.error(`[agent-runner] ${message}`);
 }
@@ -568,6 +584,7 @@ async function main(): Promise<void> {
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     log(`Agent error: ${errorMessage}`);
+    flushCaldavLog();
     writeOutput({
       status: 'error',
       result: null,
@@ -576,6 +593,7 @@ async function main(): Promise<void> {
     });
     process.exit(1);
   }
+  flushCaldavLog();
 }
 
 main();

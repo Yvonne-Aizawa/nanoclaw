@@ -191,8 +191,8 @@ function buildVolumeMounts(
     group.folder,
     'agent-runner-src',
   );
-  if (!fs.existsSync(groupAgentRunnerDir) && fs.existsSync(agentRunnerSrc)) {
-    fs.cpSync(agentRunnerSrc, groupAgentRunnerDir, { recursive: true });
+  if (fs.existsSync(agentRunnerSrc)) {
+    fs.cpSync(agentRunnerSrc, groupAgentRunnerDir, { recursive: true, force: true });
   }
   mounts.push({
     hostPath: groupAgentRunnerDir,
@@ -229,7 +229,12 @@ function buildContainerArgs(
   );
 
   // Pass Brave Search API key if configured
-  const extraSecrets = readEnvFile(['BRAVE_API_KEY', 'CALDAV_URL', 'CALDAV_USERNAME', 'CALDAV_PASSWORD']);
+  const extraSecrets = readEnvFile([
+    'BRAVE_API_KEY',
+    'CALDAV_URL',
+    'CALDAV_USERNAME',
+    'CALDAV_PASSWORD',
+  ]);
   const braveApiKey = process.env.BRAVE_API_KEY || extraSecrets.BRAVE_API_KEY;
   if (braveApiKey) {
     args.push('-e', `BRAVE_API_KEY=${braveApiKey}`);
@@ -239,8 +244,10 @@ function buildContainerArgs(
   const caldavUrl = process.env.CALDAV_URL || extraSecrets.CALDAV_URL;
   if (caldavUrl) {
     args.push('-e', `CALDAV_URL=${caldavUrl}`);
-    const caldavUser = process.env.CALDAV_USERNAME || extraSecrets.CALDAV_USERNAME || '';
-    const caldavPass = process.env.CALDAV_PASSWORD || extraSecrets.CALDAV_PASSWORD || '';
+    const caldavUser =
+      process.env.CALDAV_USERNAME || extraSecrets.CALDAV_USERNAME || '';
+    const caldavPass =
+      process.env.CALDAV_PASSWORD || extraSecrets.CALDAV_PASSWORD || '';
     if (caldavUser) args.push('-e', `CALDAV_USERNAME=${caldavUser}`);
     if (caldavPass) args.push('-e', `CALDAV_PASSWORD=${caldavPass}`);
   }
@@ -400,7 +407,12 @@ export async function runContainerAgent(
       const chunk = data.toString();
       const lines = chunk.trim().split('\n');
       for (const line of lines) {
-        if (line) logger.debug({ container: group.folder }, line);
+        if (!line) continue;
+        if (line.startsWith('[caldav]')) {
+          logger.info({ container: group.folder }, line);
+        } else {
+          logger.debug({ container: group.folder }, line);
+        }
       }
       // Don't reset timeout on stderr — SDK writes debug logs continuously.
       // Timeout only resets on actual output (OUTPUT_MARKER in stdout).

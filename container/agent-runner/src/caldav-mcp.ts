@@ -4,6 +4,7 @@
  * Credentials are injected via environment variables by the host.
  */
 
+import fs from 'fs';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createDAVClient, DAVCalendar, DAVCalendarObject } from 'tsdav';
@@ -15,6 +16,9 @@ const CALDAV_URL = process.env.CALDAV_URL!;
 const CALDAV_USERNAME = process.env.CALDAV_USERNAME!;
 const CALDAV_PASSWORD = process.env.CALDAV_PASSWORD!;
 const TIMEZONE = process.env.TZ || 'Europe/Amsterdam';
+
+const LOG_FILE = '/tmp/caldav-debug.log';
+const logStream = fs.createWriteStream(LOG_FILE, { flags: 'a' });
 
 function formatLocalDate(isoOrRaw: string): string {
   if (!isoOrRaw) return '';
@@ -67,20 +71,27 @@ interface CalEvent {
   isRecurring?: boolean;
 }
 
+const dbg = (...args: unknown[]) => logStream.write(`${new Date().toISOString()} ${args.join(' ')}\n`);
+
 function parseVEvents(icalStr: string, rangeStart?: Date, rangeEnd?: Date): CalEvent[] {
   const events: CalEvent[] = [];
   const eventBlocks = icalStr.match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/g) || [];
+  dbg(`parsing ${eventBlocks.length} VEVENT block(s), range: ${rangeStart?.toISOString()} → ${rangeEnd?.toISOString()}`);
   for (const block of eventBlocks) {
     // Handle folded lines (lines continued with a space/tab)
     const unfolded = block.replace(/\r?\n[ \t]/g, '');
 
-    const rawStart = unfolded.match(/DTSTART(?:;[^:]*)?:([^\r\n]*)/m)?.[1] || '';
+    const dtStartMatch = unfolded.match(/DTSTART((?:;[^:]*)?):([^\r\n]*)/m);
+    const rawStart = dtStartMatch?.[2] || '';
+    const dtStartHasTzid = (dtStartMatch?.[1] || '').toUpperCase().includes('TZID=');
     const rawEnd = unfolded.match(/DTEND(?:;[^:]*)?:([^\r\n]*)/m)?.[1] || '';
     const rruleStr = parseIcalField(unfolded, 'RRULE');
     const uid = parseIcalField(unfolded, 'UID');
     const summary = parseIcalField(unfolded, 'SUMMARY');
     const description = parseIcalField(unfolded, 'DESCRIPTION').replace(/\\n/g, '\n').replace(/\\,/g, ',');
     const location = parseIcalField(unfolded, 'LOCATION');
+
+    dbg(`event: "${summary}" uid=${uid} rawStart=${rawStart} hasTzid=${dtStartHasTzid} rrule=${rruleStr || '(none)'}`);
 
     if (rruleStr && rangeStart && rangeEnd) {
       // Expand recurring event — find occurrences within the queried range
@@ -91,37 +102,54 @@ function parseVEvents(icalStr: string, rangeStart?: Date, rangeEnd?: Date): CalE
           ? new Date(parseIcalDate(rawEnd)).getTime() - originalStart.getTime()
           : 0;
 
+        // rrule strips TZID and treats local time as UTC regardless of whether
+        // TZID is present. For any non-UTC time (no Z suffix), use UTC components
+        // directly to recover the original local time without double-conversion.
+        const isFloating = !rawStart.includes('Z');
+        dbg(`  recurring: dtstart=${dtstart} isFloating=${isFloating} duration=${duration}ms`);
+
         const rule = rrulestr(`DTSTART:${rawStart}\nRRULE:${rruleStr}`);
         const occurrences = rule.between(rangeStart, rangeEnd, true);
+        dbg(`  occurrences in range: ${occurrences.length}`);
+
+        const fmtUtc = (d: Date) =>
+          `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
 
         for (const occ of occurrences) {
           const occEnd = duration > 0 ? new Date(occ.getTime() + duration) : occ;
+          const startStr = isFloating ? fmtUtc(occ) : occ.toISOString();
+          const endStr = isFloating ? fmtUtc(occEnd) : occEnd.toISOString();
+          dbg(`  occ: raw=${occ.toISOString()} → start=${startStr}`);
           events.push({
             uid,
             summary,
-            start: occ.toISOString(),
-            end: occEnd.toISOString(),
+            start: startStr,
+            end: endStr,
             description,
             location,
             isRecurring: true,
           });
         }
         continue;
-      } catch {
-        // Fall through to plain parse if rrule expansion fails
+      } catch (err) {
+        dbg(`  rrule expansion failed: ${err} — falling back to plain parse`);
       }
     }
 
+    const parsedStart = parseIcalDate(rawStart);
+    const parsedEnd = parseIcalDate(rawEnd);
+    dbg(`  plain event: start=${parsedStart} end=${parsedEnd}`);
     events.push({
       uid,
       summary,
-      start: parseIcalDate(rawStart),
-      end: parseIcalDate(rawEnd),
+      start: parsedStart,
+      end: parsedEnd,
       description,
       location,
       isRecurring: !!rruleStr,
     });
   }
+  dbg(`parseVEvents done: ${events.length} event(s) emitted`);
   return events;
 }
 
@@ -208,21 +236,25 @@ server.tool(
 
       const startDate = new Date(args.start);
       const endDate = new Date(args.end);
+      dbg(`get_events: range ${startDate.toISOString()} → ${endDate.toISOString()}, calendars: ${calendars.length}`);
       const allEvents: (CalEvent & { calendar: string })[] = [];
 
       for (const cal of calendars) {
+        const calName = String(cal.displayName || cal.url || '');
         const objects: DAVCalendarObject[] = await client.fetchCalendarObjects({
           calendar: cal,
           timeRange: { start: startDate.toISOString(), end: endDate.toISOString() },
         });
+        dbg(`  calendar "${calName}": ${objects.length} object(s) fetched`);
         for (const obj of objects) {
           if (!obj.data) continue;
           const events = parseVEvents(obj.data, startDate, endDate);
           for (const ev of events) {
-            allEvents.push({ ...ev, calendar: String(cal.displayName || cal.url || '') });
+            allEvents.push({ ...ev, calendar: calName });
           }
         }
       }
+      dbg(`get_events total: ${allEvents.length} event(s)`);
 
       if (allEvents.length === 0) {
         return { content: [{ type: 'text' as const, text: `No events found between ${args.start} and ${args.end}.` }] };
