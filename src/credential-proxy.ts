@@ -58,7 +58,13 @@ export function startCredentialProxy(
             const parsed = JSON.parse(body.toString());
             if (parsed.model !== undefined) {
               if (overrideModel) parsed.model = overrideModel;
-              logger.info({ model: parsed.model, endpoint: upstreamUrl.origin + basePath }, 'Proxy: model in use');
+              logger.info(
+                {
+                  model: parsed.model,
+                  endpoint: upstreamUrl.origin + basePath,
+                },
+                'Proxy: model in use',
+              );
               body = Buffer.from(JSON.stringify(parsed));
             }
           } catch {
