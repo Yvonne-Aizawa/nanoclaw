@@ -551,6 +551,8 @@ async function main(): Promise<void> {
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
+    // Force exit after 8s if graceful shutdown hangs (e.g. Telegram polling)
+    setTimeout(() => process.exit(0), 8000).unref();
     proxyServer.close();
     await queue.shutdown(10000);
     for (const ch of channels) await ch.disconnect();
