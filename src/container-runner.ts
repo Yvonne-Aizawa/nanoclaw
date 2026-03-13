@@ -232,17 +232,14 @@ function buildContainerArgs(
     `ANTHROPIC_BASE_URL=http://${CONTAINER_HOST_GATEWAY}:${CREDENTIAL_PROXY_PORT}`,
   );
 
-  // Pass Brave Search API key if configured
+  // Pass MCP server URLs so the agent can reach sandboxed MCP containers.
+  // Secrets (API keys, CalDAV credentials) stay inside those containers.
   const { brave, caldav } = loadAppConfig();
   if (brave.enabled && brave.token) {
-    args.push('-e', `BRAVE_API_KEY=${brave.token}`);
+    args.push('-e', `BRAVE_MCP_URL=http://${CONTAINER_HOST_GATEWAY}:7701/mcp`);
   }
-
-  // Pass CalDAV credentials if configured
   if (caldav.enabled && caldav.url) {
-    args.push('-e', `CALDAV_URL=${caldav.url}`);
-    if (caldav.username) args.push('-e', `CALDAV_USERNAME=${caldav.username}`);
-    if (caldav.password) args.push('-e', `CALDAV_PASSWORD=${caldav.password}`);
+    args.push('-e', `CALDAV_MCP_URL=http://${CONTAINER_HOST_GATEWAY}:7702/mcp`);
   }
 
   // Mirror the host's auth method with a placeholder value.

@@ -46,6 +46,7 @@ import {
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
+import { startMcpContainers, stopMcpContainers } from './mcp-containers.js';
 import { initBotPool } from './channels/telegram.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
 import {
@@ -565,6 +566,9 @@ async function main(): Promise<void> {
   logger.info('Database initialized');
   loadState();
 
+  // Start sandboxed MCP server containers (brave, caldav) before channels connect
+  await startMcpContainers();
+
   // Start credential proxy (containers route API calls through this)
   const proxyServer = await startCredentialProxy(
     CREDENTIAL_PROXY_PORT,
@@ -576,6 +580,7 @@ async function main(): Promise<void> {
     logger.info({ signal }, 'Shutdown signal received');
     // Force exit after 8s if graceful shutdown hangs (e.g. Telegram polling)
     setTimeout(() => process.exit(0), 8000).unref();
+    stopMcpContainers();
     proxyServer.close();
     await queue.shutdown(10000);
     for (const ch of channels) await ch.disconnect();

@@ -460,26 +460,11 @@ async function runQuery(
             NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
           },
         },
-        ...(process.env.BRAVE_API_KEY ? {
-          brave: {
-            command: 'npx',
-            args: ['-y', '@modelcontextprotocol/server-brave-search'],
-            env: {
-              BRAVE_API_KEY: process.env.BRAVE_API_KEY,
-            },
-          },
+        ...(process.env.BRAVE_MCP_URL ? {
+          brave: { type: 'http' as const, url: process.env.BRAVE_MCP_URL },
         } : {}),
-        ...(process.env.CALDAV_URL ? {
-          caldav: {
-            command: 'node',
-            args: [path.join(path.dirname(mcpServerPath), 'caldav-mcp.js')],
-            env: {
-              CALDAV_URL: process.env.CALDAV_URL,
-              CALDAV_USERNAME: process.env.CALDAV_USERNAME || '',
-              CALDAV_PASSWORD: process.env.CALDAV_PASSWORD || '',
-              TZ: process.env.TZ || 'Europe/Amsterdam',
-            },
-          },
+        ...(process.env.CALDAV_MCP_URL ? {
+          caldav: { type: 'http' as const, url: process.env.CALDAV_MCP_URL },
         } : {}),
       },
       hooks: {

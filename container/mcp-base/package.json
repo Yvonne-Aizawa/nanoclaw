@@ -1,0 +1,9 @@
+{
+  "name": "nanoclaw-mcp-base",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "express": "^4.21.2"
+  }
+}
