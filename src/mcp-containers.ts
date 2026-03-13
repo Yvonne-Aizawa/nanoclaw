@@ -6,6 +6,7 @@
  */
 
 import { execFileSync, execSync } from 'child_process';
+import os from 'os';
 
 import { loadAppConfig } from './app-config.js';
 import { CONTAINER_RUNTIME_BIN, hostGatewayArgs } from './container-runtime.js';
@@ -18,6 +19,27 @@ interface McpContainerSpec {
   env: Record<string, string>;
   /** Readiness timeout in ms — npx/uvx need longer for package download */
   readyTimeout?: number;
+  /** Host→container volume mounts: "hostPath:containerPath" or "hostPath:containerPath:ro" */
+  mounts?: string[];
+}
+
+/** Expand a leading ~/ to the user's home directory. */
+function expandHome(p: string): string {
+  if (p.startsWith('~/') || p === '~') {
+    return os.homedir() + p.slice(1);
+  }
+  return p;
+}
+
+/**
+ * Expand ~ in a mount string (only in the host path segment, before the first colon).
+ * e.g. "~/media:/media:ro" → "/home/user/media:/media:ro"
+ */
+function expandMountHome(mount: string): string {
+  const colonIdx = mount.indexOf(':');
+  if (colonIdx === -1) return expandHome(mount);
+  const hostPart = expandHome(mount.slice(0, colonIdx));
+  return hostPart + mount.slice(colonIdx);
 }
 
 function buildContainerSpecs(): McpContainerSpec[] {
@@ -58,9 +80,13 @@ function buildContainerSpecs(): McpContainerSpec[] {
         env: {
           MCP_PACKAGE: srv.package,
           MCP_PORT: String(srv.port),
+          ...(srv.args && srv.args.length > 0
+            ? { MCP_ARGS: JSON.stringify(srv.args) }
+            : {}),
           ...(srv.env ?? {}),
         },
         readyTimeout: 30000, // npx/uvx may need to download packages
+        mounts: srv.mounts,
       });
     } else if (srv.type === 'remote') {
       const env: Record<string, string> = {
@@ -77,6 +103,7 @@ function buildContainerSpecs(): McpContainerSpec[] {
         image: 'nanoclaw-mcp-remote',
         port: srv.port,
         env,
+        mounts: srv.mounts,
       });
     }
   }
@@ -98,6 +125,11 @@ function startContainer(spec: McpContainerSpec): void {
     `${k}=${v}`,
   ]);
 
+  const volumeArgs = (spec.mounts ?? []).flatMap((m) => [
+    '-v',
+    expandMountHome(m),
+  ]);
+
   const args = [
     'run',
     '-d',
@@ -109,6 +141,7 @@ function startContainer(spec: McpContainerSpec): void {
     `${spec.port}:${spec.port}`,
     ...hostGatewayArgs(),
     ...envArgs,
+    ...volumeArgs,
     spec.image,
   ];
 
@@ -186,14 +219,25 @@ export function stopMcpContainers(): void {
   }
 }
 
+/** Parsed representation of a single mount entry for the agent. */
+export interface McpMount {
+  containerPath: string;
+  readonly: boolean;
+}
+
 /**
  * Returns the list of active MCP server URLs to pass to agent containers.
- * Each entry is { name, url } where url points to host.docker.internal:<port>.
+ * Each entry is { name, url, mounts? } where url points to host.docker.internal:<port>.
+ * mounts describes paths accessible inside the MCP container (no host paths exposed).
  */
-export function getMcpServerUrls(): Array<{ name: string; url: string }> {
+export function getMcpServerUrls(): Array<{
+  name: string;
+  url: string;
+  mounts?: McpMount[];
+}> {
   const { brave, caldav, mcp } = loadAppConfig();
   const GATEWAY = 'host.docker.internal';
-  const servers: Array<{ name: string; url: string }> = [];
+  const servers: Array<{ name: string; url: string; mounts?: McpMount[] }> = [];
 
   if (brave.enabled && brave.token) {
     servers.push({ name: 'brave', url: `http://${GATEWAY}:7701/mcp` });
@@ -202,11 +246,28 @@ export function getMcpServerUrls(): Array<{ name: string; url: string }> {
     servers.push({ name: 'caldav', url: `http://${GATEWAY}:7702/mcp` });
   }
   for (const srv of mcp?.servers ?? []) {
+    const mounts = parseMounts(srv.mounts);
     servers.push({
       name: srv.name,
       url: `http://${GATEWAY}:${srv.port}/mcp`,
+      ...(mounts.length > 0 ? { mounts } : {}),
     });
   }
 
   return servers;
+}
+
+/**
+ * Parse mount strings into { containerPath, readonly } objects.
+ * Format: "hostPath:containerPath" or "hostPath:containerPath:ro"
+ */
+function parseMounts(mounts?: string[]): McpMount[] {
+  if (!mounts || mounts.length === 0) return [];
+  return mounts.map((m) => {
+    const parts = m.split(':');
+    // parts[0] = hostPath, parts[1] = containerPath, parts[2]? = "ro"
+    const containerPath = parts[1] ?? parts[0];
+    const readonly = parts[2] === 'ro';
+    return { containerPath, readonly };
+  });
 }

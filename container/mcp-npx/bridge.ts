@@ -21,6 +21,9 @@ import express from 'express';
 const MCP_PACKAGE = process.env.MCP_PACKAGE;
 const MCP_COMMAND = process.env.MCP_COMMAND ?? 'npx';
 const PORT = parseInt(process.env.MCP_PORT ?? '7700', 10);
+const MCP_EXTRA_ARGS: string[] = process.env.MCP_ARGS
+  ? (JSON.parse(process.env.MCP_ARGS) as string[])
+  : [];
 
 if (!MCP_PACKAGE) {
   console.error('MCP_PACKAGE is required');
@@ -30,7 +33,7 @@ if (!MCP_PACKAGE) {
 // Forward all env vars to subprocess except our own control vars
 const subEnv: Record<string, string> = {};
 for (const [k, v] of Object.entries(process.env)) {
-  if (!['MCP_PACKAGE', 'MCP_COMMAND', 'MCP_PORT'].includes(k) && v !== undefined) {
+  if (!['MCP_PACKAGE', 'MCP_COMMAND', 'MCP_PORT', 'MCP_ARGS'].includes(k) && v !== undefined) {
     subEnv[k] = v;
   }
 }
@@ -40,7 +43,9 @@ const pending = new Map<string | number, RpcCallback>();
 let child: ChildProcess | null = null;
 
 function startProcess(): void {
-  const args = MCP_COMMAND === 'npx' ? ['-y', MCP_PACKAGE!] : [MCP_PACKAGE!];
+  const args = MCP_COMMAND === 'npx'
+    ? ['-y', MCP_PACKAGE!, ...MCP_EXTRA_ARGS]
+    : [MCP_PACKAGE!, ...MCP_EXTRA_ARGS];
   child = spawn(MCP_COMMAND, args, {
     env: subEnv,
     stdio: ['pipe', 'pipe', 'inherit'],

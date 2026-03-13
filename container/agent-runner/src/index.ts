@@ -138,21 +138,44 @@ function log(message: string): void {
   console.error(`[agent-runner] ${message}`);
 }
 
+interface McpServerEntry {
+  name: string;
+  url: string;
+  mounts?: Array<{ containerPath: string; readonly: boolean }>;
+}
+
 /**
- * Parse the MCP_SERVERS env var (JSON array of {name, url}) into mcpServers config.
- * The agent container never sees credentials — only local proxy URLs.
+ * Parse the MCP_SERVERS env var (JSON array of {name, url, mounts?}) into:
+ * - servers: mcpServers config map
+ * - mountDescription: system prompt section describing accessible paths per server
  */
-function parseMcpServers(): Record<string, { type: 'http'; url: string }> {
+function parseMcpServers(): {
+  servers: Record<string, { type: 'http'; url: string }>;
+  mountDescription: string;
+} {
   const raw = process.env.MCP_SERVERS;
-  if (!raw) return {};
+  if (!raw) return { servers: {}, mountDescription: '' };
   try {
-    const servers = JSON.parse(raw) as Array<{ name: string; url: string }>;
-    return Object.fromEntries(
-      servers.map(({ name, url }) => [name, { type: 'http' as const, url }]),
+    const entries = JSON.parse(raw) as McpServerEntry[];
+    const servers = Object.fromEntries(
+      entries.map(({ name, url }) => [name, { type: 'http' as const, url }]),
     );
+    const mountLines = entries
+      .filter((e) => e.mounts && e.mounts.length > 0)
+      .map((e) => {
+        const paths = e.mounts!
+          .map((m) => `\`${m.containerPath}\` (${m.readonly ? 'read-only' : 'read-write'})`)
+          .join(', ');
+        return `- **${e.name}**: ${paths}`;
+      });
+    const mountDescription =
+      mountLines.length > 0
+        ? `## MCP Server File Access\nThe following MCP servers have access to these paths inside their container:\n${mountLines.join('\n')}`
+        : '';
+    return { servers, mountDescription };
   } catch {
     console.error('[agent-runner] Failed to parse MCP_SERVERS env var');
-    return {};
+    return { servers: {}, mountDescription: '' };
   }
 }
 
@@ -426,6 +449,9 @@ async function runQuery(
     globalClaudeMd = fs.readFileSync(globalClaudeMdPath, 'utf-8');
   }
 
+  const { servers: mcpServerMap, mountDescription } = parseMcpServers();
+  const systemPromptAppend = [globalClaudeMd, mountDescription].filter(Boolean).join('\n\n');
+
   // Discover additional directories mounted at /workspace/extra/*
   // These are passed to the SDK so their CLAUDE.md files are loaded automatically
   const extraDirs: string[] = [];
@@ -449,8 +475,8 @@ async function runQuery(
       additionalDirectories: extraDirs.length > 0 ? extraDirs : undefined,
       resume: sessionId,
       resumeSessionAt: resumeAt,
-      systemPrompt: globalClaudeMd
-        ? { type: 'preset' as const, preset: 'claude_code' as const, append: globalClaudeMd }
+      systemPrompt: systemPromptAppend
+        ? { type: 'preset' as const, preset: 'claude_code' as const, append: systemPromptAppend }
         : undefined,
       allowedTools: [
         'Bash',
@@ -478,7 +504,7 @@ async function runQuery(
             NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
           },
         },
-        ...parseMcpServers(),
+        ...mcpServerMap,
       },
       hooks: {
         PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],

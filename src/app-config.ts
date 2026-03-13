@@ -18,6 +18,17 @@ export interface McpStdioServerConfig {
   port: number;
   /** Extra env vars forwarded to the subprocess (secrets stay in the container) */
   env?: Record<string, string>;
+  /**
+   * Extra CLI arguments passed to the subprocess after the package name.
+   * Example: ["/docs", "/media"] for @modelcontextprotocol/server-filesystem
+   */
+  args?: string[];
+  /**
+   * Host paths to mount into the MCP container.
+   * Format: "hostPath:containerPath" or "hostPath:containerPath:ro"
+   * hostPath supports ~ expansion (resolved on the host).
+   */
+  mounts?: string[];
 }
 
 /** A remote MCP server proxied through a container that injects auth headers. */
@@ -33,6 +44,12 @@ export interface McpRemoteServerConfig {
    * Example: { "Authorization": "Bearer sk-..." }
    */
   headers?: Record<string, string>;
+  /**
+   * Host paths to mount into the MCP container.
+   * Format: "hostPath:containerPath" or "hostPath:containerPath:ro"
+   * hostPath supports ~ expansion (resolved on the host).
+   */
+  mounts?: string[];
 }
 
 export type McpServerConfig = McpStdioServerConfig | McpRemoteServerConfig;
