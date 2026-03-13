@@ -280,7 +280,60 @@ export class TelegramChannel implements Channel {
       });
     };
 
-    this.bot.on('message:photo', (ctx) => storeNonText(ctx, '[Photo]'));
+    this.bot.on('message:photo', async (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = this.opts.registeredGroups()[chatJid];
+      if (!group) return;
+
+      const timestamp = new Date(ctx.message.date * 1000).toISOString();
+      const senderName =
+        ctx.from?.first_name ||
+        ctx.from?.username ||
+        ctx.from?.id?.toString() ||
+        'Unknown';
+      const caption = ctx.message.caption ? ` ${ctx.message.caption}` : '';
+      const isGroup =
+        ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+      const chatName = isGroup
+        ? (ctx.chat as any).title || chatJid
+        : senderName;
+
+      // Download the largest photo (last in array = highest resolution)
+      let image_data: string | undefined;
+      let image_media_type: string | undefined;
+      const photo = ctx.message.photo[ctx.message.photo.length - 1];
+      try {
+        const file = await ctx.api.getFile(photo.file_id);
+        if (file.file_path) {
+          const fileUrl = `https://api.telegram.org/file/bot${this.botToken}/${file.file_path}`;
+          const response = await fetch(fileUrl);
+          if (response.ok) {
+            const buffer = Buffer.from(await response.arrayBuffer());
+            image_data = buffer.toString('base64');
+            image_media_type = 'image/jpeg';
+          }
+        }
+      } catch (err) {
+        logger.warn({ err }, 'Failed to download Telegram photo, sending placeholder');
+      }
+
+      this.opts.onChatMetadata(chatJid, timestamp, chatName, 'telegram', isGroup);
+      this.opts.onMessage(chatJid, {
+        id: ctx.message.message_id.toString(),
+        chat_jid: chatJid,
+        sender: ctx.from?.id?.toString() || '',
+        sender_name: senderName,
+        content: `[Photo]${caption}`,
+        timestamp,
+        is_from_me: false,
+        image_data,
+        image_media_type,
+      });
+      logger.info(
+        { chatJid, hasImage: !!image_data },
+        'Telegram photo received',
+      );
+    });
     this.bot.on('message:video', (ctx) => storeNonText(ctx, '[Video]'));
     this.bot.on('message:voice', (ctx) => storeNonText(ctx, '[Voice message]'));
     this.bot.on('message:audio', (ctx) => storeNonText(ctx, '[Audio]'));

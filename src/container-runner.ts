@@ -42,6 +42,7 @@ export interface ContainerInput {
   isMain: boolean;
   isScheduledTask?: boolean;
   assistantName?: string;
+  imageAttachments?: Array<{ data: string; media_type: string }>;
 }
 
 export interface ContainerOutput {
