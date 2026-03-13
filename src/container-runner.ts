@@ -16,7 +16,7 @@ import {
   IDLE_TIMEOUT,
   TIMEZONE,
 } from './config.js';
-import { readEnvFile } from './env.js';
+import { loadAppConfig } from './app-config.js';
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
 import { logger } from './logger.js';
 import {
@@ -232,28 +232,16 @@ function buildContainerArgs(
   );
 
   // Pass Brave Search API key if configured
-  const extraSecrets = readEnvFile([
-    'BRAVE_API_KEY',
-    'CALDAV_URL',
-    'CALDAV_USERNAME',
-    'CALDAV_PASSWORD',
-  ]);
-
-  const braveApiKey = process.env.BRAVE_API_KEY || extraSecrets.BRAVE_API_KEY;
-  if (braveApiKey) {
-    args.push('-e', `BRAVE_API_KEY=${braveApiKey}`);
+  const { brave, caldav } = loadAppConfig();
+  if (brave.enabled && brave.token) {
+    args.push('-e', `BRAVE_API_KEY=${brave.token}`);
   }
 
   // Pass CalDAV credentials if configured
-  const caldavUrl = process.env.CALDAV_URL || extraSecrets.CALDAV_URL;
-  if (caldavUrl) {
-    args.push('-e', `CALDAV_URL=${caldavUrl}`);
-    const caldavUser =
-      process.env.CALDAV_USERNAME || extraSecrets.CALDAV_USERNAME || '';
-    const caldavPass =
-      process.env.CALDAV_PASSWORD || extraSecrets.CALDAV_PASSWORD || '';
-    if (caldavUser) args.push('-e', `CALDAV_USERNAME=${caldavUser}`);
-    if (caldavPass) args.push('-e', `CALDAV_PASSWORD=${caldavPass}`);
+  if (caldav.enabled && caldav.url) {
+    args.push('-e', `CALDAV_URL=${caldav.url}`);
+    if (caldav.username) args.push('-e', `CALDAV_USERNAME=${caldav.username}`);
+    if (caldav.password) args.push('-e', `CALDAV_PASSWORD=${caldav.password}`);
   }
 
   // Mirror the host's auth method with a placeholder value.

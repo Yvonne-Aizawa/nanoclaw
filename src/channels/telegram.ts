@@ -1,8 +1,8 @@
 import https from 'https';
 import { Api, Bot } from 'grammy';
 
+import { loadAppConfig } from '../app-config.js';
 import { ASSISTANT_NAME, TRIGGER_PATTERN } from '../config.js';
-import { readEnvFile } from '../env.js';
 import { logger } from '../logger.js';
 import { registerChannel, ChannelOpts } from './registry.js';
 import {
@@ -374,11 +374,9 @@ export class TelegramChannel implements Channel {
 }
 
 registerChannel('telegram', (opts: ChannelOpts) => {
-  const envVars = readEnvFile(['TELEGRAM_BOT_TOKEN']);
-  const token =
-    process.env.TELEGRAM_BOT_TOKEN || envVars.TELEGRAM_BOT_TOKEN || '';
+  const token = loadAppConfig().telegram.main_bot_token;
   if (!token) {
-    logger.warn('Telegram: TELEGRAM_BOT_TOKEN not set');
+    logger.warn('Telegram: telegram.main_bot_token not set in config.json');
     return null;
   }
   return new TelegramChannel(token, opts);
