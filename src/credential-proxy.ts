@@ -53,11 +53,12 @@ export function startCredentialProxy(
         // Rewrite model in request body if ANTHROPIC_MODEL is set and this is a messages request
         let body = Buffer.concat(chunks);
         const overrideModel = secrets.ANTHROPIC_MODEL;
-        if (overrideModel && req.url?.includes('/messages') && body.length > 0) {
+        if (req.url?.includes('/messages') && body.length > 0) {
           try {
             const parsed = JSON.parse(body.toString());
             if (parsed.model !== undefined) {
-              parsed.model = overrideModel;
+              if (overrideModel) parsed.model = overrideModel;
+              logger.info({ model: parsed.model, endpoint: upstreamUrl.origin + basePath }, 'Proxy: model in use');
               body = Buffer.from(JSON.stringify(parsed));
             }
           } catch {
@@ -139,10 +140,16 @@ export function startCredentialProxy(
 
 /** Detect which auth mode the host is configured for. */
 export function detectAuthMode(): AuthMode {
-  const secrets = readEnvFile(['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN']);
+  const secrets = readEnvFile([
+    'ANTHROPIC_API_KEY',
+    'ANTHROPIC_AUTH_TOKEN',
+    'CLAUDE_CODE_OAUTH_TOKEN',
+  ]);
   // ANTHROPIC_AUTH_TOKEN = Bearer token for non-Anthropic endpoints (e.g. z.ai).
   // Use api-key mode so the container skips the OAuth exchange flow.
   // OAuth takes priority when CLAUDE_CODE_OAUTH_TOKEN is explicitly set.
   if (secrets.CLAUDE_CODE_OAUTH_TOKEN) return 'oauth';
-  return secrets.ANTHROPIC_API_KEY || secrets.ANTHROPIC_AUTH_TOKEN ? 'api-key' : 'oauth';
+  return secrets.ANTHROPIC_API_KEY || secrets.ANTHROPIC_AUTH_TOKEN
+    ? 'api-key'
+    : 'oauth';
 }
