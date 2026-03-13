@@ -17,6 +17,7 @@ import {
   TIMEZONE,
 } from './config.js';
 import { loadAppConfig } from './app-config.js';
+import { getMcpServerUrls } from './mcp-containers.js';
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
 import { logger } from './logger.js';
 import {
@@ -232,14 +233,12 @@ function buildContainerArgs(
     `ANTHROPIC_BASE_URL=http://${CONTAINER_HOST_GATEWAY}:${CREDENTIAL_PROXY_PORT}`,
   );
 
-  // Pass MCP server URLs so the agent can reach sandboxed MCP containers.
-  // Secrets (API keys, CalDAV credentials) stay inside those containers.
-  const { brave, caldav } = loadAppConfig();
-  if (brave.enabled && brave.token) {
-    args.push('-e', `BRAVE_MCP_URL=http://${CONTAINER_HOST_GATEWAY}:7701/mcp`);
-  }
-  if (caldav.enabled && caldav.url) {
-    args.push('-e', `CALDAV_MCP_URL=http://${CONTAINER_HOST_GATEWAY}:7702/mcp`);
+  // Pass all active MCP server URLs as a JSON array.
+  // Secrets stay inside the MCP containers — the agent only gets local URLs.
+  void loadAppConfig(); // ensure config is loaded (side-effect: caches it)
+  const mcpServers = getMcpServerUrls();
+  if (mcpServers.length > 0) {
+    args.push('-e', `MCP_SERVERS=${JSON.stringify(mcpServers)}`);
   }
 
   // Mirror the host's auth method with a placeholder value.

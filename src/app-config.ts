@@ -9,6 +9,34 @@ interface AiEndpointConfig {
   model?: string;
 }
 
+/** An npx or uvx stdio MCP server wrapped in a container. */
+export interface McpStdioServerConfig {
+  type: 'npx' | 'uvx';
+  /** npm or Python package name to run */
+  package: string;
+  /** Host port the container listens on — must be unique across all MCP servers */
+  port: number;
+  /** Extra env vars forwarded to the subprocess (secrets stay in the container) */
+  env?: Record<string, string>;
+}
+
+/** A remote MCP server proxied through a container that injects auth headers. */
+export interface McpRemoteServerConfig {
+  type: 'remote';
+  /** Full URL of the upstream MCP server */
+  url: string;
+  /** Host port the proxy container listens on — must be unique */
+  port: number;
+  /**
+   * HTTP headers injected into every upstream request.
+   * These stay inside the proxy container — the agent never sees them.
+   * Example: { "Authorization": "Bearer sk-..." }
+   */
+  headers?: Record<string, string>;
+}
+
+export type McpServerConfig = McpStdioServerConfig | McpRemoteServerConfig;
+
 export interface AppConfig {
   ai: {
     type: 'api' | 'oauth' | 'token';
@@ -29,6 +57,10 @@ export interface AppConfig {
     url: string;
     username: string;
     password: string;
+  };
+  /** Additional MCP servers to sandbox in containers. */
+  mcp?: {
+    servers?: Array<{ name: string } & McpServerConfig>;
   };
 }
 

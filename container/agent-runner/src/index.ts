@@ -138,6 +138,24 @@ function log(message: string): void {
   console.error(`[agent-runner] ${message}`);
 }
 
+/**
+ * Parse the MCP_SERVERS env var (JSON array of {name, url}) into mcpServers config.
+ * The agent container never sees credentials — only local proxy URLs.
+ */
+function parseMcpServers(): Record<string, { type: 'http'; url: string }> {
+  const raw = process.env.MCP_SERVERS;
+  if (!raw) return {};
+  try {
+    const servers = JSON.parse(raw) as Array<{ name: string; url: string }>;
+    return Object.fromEntries(
+      servers.map(({ name, url }) => [name, { type: 'http' as const, url }]),
+    );
+  } catch {
+    console.error('[agent-runner] Failed to parse MCP_SERVERS env var');
+    return {};
+  }
+}
+
 function getSessionSummary(sessionId: string, transcriptPath: string): string | null {
   const projectDir = path.dirname(transcriptPath);
   const indexPath = path.join(projectDir, 'sessions-index.json');
@@ -460,12 +478,7 @@ async function runQuery(
             NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
           },
         },
-        ...(process.env.BRAVE_MCP_URL ? {
-          brave: { type: 'http' as const, url: process.env.BRAVE_MCP_URL },
-        } : {}),
-        ...(process.env.CALDAV_MCP_URL ? {
-          caldav: { type: 'http' as const, url: process.env.CALDAV_MCP_URL },
-        } : {}),
+        ...parseMcpServers(),
       },
       hooks: {
         PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],
