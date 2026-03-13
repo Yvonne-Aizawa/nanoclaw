@@ -547,9 +547,10 @@ async function main(): Promise<void> {
   // --- Slash command handling ---
   // Only known session slash commands are handled here. This prevents
   // accidental interception of user prompts that happen to start with '/'.
-  const KNOWN_SESSION_COMMANDS = new Set(['/compact']);
+  const KNOWN_SESSION_COMMANDS = new Map([['!compact', '/compact']]);
   const trimmedPrompt = prompt.trim();
-  const isSessionSlashCommand = KNOWN_SESSION_COMMANDS.has(trimmedPrompt);
+  const sdkCommand = KNOWN_SESSION_COMMANDS.get(trimmedPrompt);
+  const isSessionSlashCommand = sdkCommand !== undefined;
 
   if (isSessionSlashCommand) {
     log(`Handling session command: ${trimmedPrompt}`);
@@ -560,7 +561,7 @@ async function main(): Promise<void> {
 
     try {
       for await (const message of query({
-        prompt: trimmedPrompt,
+        prompt: sdkCommand,
         options: {
           cwd: '/workspace/group',
           resume: sessionId,

@@ -8,7 +8,7 @@ import { logger } from './logger.js';
 export function extractSessionCommand(content: string, triggerPattern: RegExp): string | null {
   let text = content.trim();
   text = text.replace(triggerPattern, '').trim();
-  if (text === '/compact') return '/compact';
+  if (text === '!compact') return '!compact';
   return null;
 }
 

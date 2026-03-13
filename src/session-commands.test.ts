@@ -6,20 +6,20 @@ import type { SessionCommandDeps } from './session-commands.js';
 describe('extractSessionCommand', () => {
   const trigger = /^@Andy\b/i;
 
-  it('detects bare /compact', () => {
-    expect(extractSessionCommand('/compact', trigger)).toBe('/compact');
+  it('detects bare !compact', () => {
+    expect(extractSessionCommand('!compact', trigger)).toBe('!compact');
   });
 
-  it('detects /compact with trigger prefix', () => {
-    expect(extractSessionCommand('@Andy /compact', trigger)).toBe('/compact');
+  it('detects !compact with trigger prefix', () => {
+    expect(extractSessionCommand('@Andy !compact', trigger)).toBe('!compact');
   });
 
-  it('rejects /compact with extra text', () => {
-    expect(extractSessionCommand('/compact now please', trigger)).toBeNull();
+  it('rejects !compact with extra text', () => {
+    expect(extractSessionCommand('!compact now please', trigger)).toBeNull();
   });
 
   it('rejects partial matches', () => {
-    expect(extractSessionCommand('/compaction', trigger)).toBeNull();
+    expect(extractSessionCommand('!compaction', trigger)).toBeNull();
   });
 
   it('rejects regular messages', () => {
@@ -27,11 +27,11 @@ describe('extractSessionCommand', () => {
   });
 
   it('handles whitespace', () => {
-    expect(extractSessionCommand('  /compact  ', trigger)).toBe('/compact');
+    expect(extractSessionCommand('  !compact  ', trigger)).toBe('!compact');
   });
 
   it('is case-sensitive for the command', () => {
-    expect(extractSessionCommand('/Compact', trigger)).toBeNull();
+    expect(extractSessionCommand('!Compact', trigger)).toBeNull();
   });
 });
 
@@ -94,10 +94,10 @@ describe('handleSessionCommand', () => {
     expect(result.handled).toBe(false);
   });
 
-  it('handles authorized /compact in main group', async () => {
+  it('handles authorized !compact in main group', async () => {
     const deps = makeDeps();
     const result = await handleSessionCommand({
-      missedMessages: [makeMsg('/compact')],
+      missedMessages: [makeMsg('!compact')],
       isMainGroup: true,
       groupName: 'test',
       triggerPattern: trigger,
@@ -105,14 +105,14 @@ describe('handleSessionCommand', () => {
       deps,
     });
     expect(result).toEqual({ handled: true, success: true });
-    expect(deps.runAgent).toHaveBeenCalledWith('/compact', expect.any(Function));
+    expect(deps.runAgent).toHaveBeenCalledWith('!compact', expect.any(Function));
     expect(deps.advanceCursor).toHaveBeenCalledWith('100');
   });
 
   it('sends denial to interactable sender in non-main group', async () => {
     const deps = makeDeps();
     const result = await handleSessionCommand({
-      missedMessages: [makeMsg('/compact', { is_from_me: false })],
+      missedMessages: [makeMsg('!compact', { is_from_me: false })],
       isMainGroup: false,
       groupName: 'test',
       triggerPattern: trigger,
@@ -128,7 +128,7 @@ describe('handleSessionCommand', () => {
   it('silently consumes denied command when sender cannot interact', async () => {
     const deps = makeDeps({ canSenderInteract: vi.fn().mockReturnValue(false) });
     const result = await handleSessionCommand({
-      missedMessages: [makeMsg('/compact', { is_from_me: false })],
+      missedMessages: [makeMsg('!compact', { is_from_me: false })],
       isMainGroup: false,
       groupName: 'test',
       triggerPattern: trigger,
@@ -140,11 +140,11 @@ describe('handleSessionCommand', () => {
     expect(deps.advanceCursor).toHaveBeenCalledWith('100');
   });
 
-  it('processes pre-compact messages before /compact', async () => {
+  it('processes pre-compact messages before !compact', async () => {
     const deps = makeDeps();
     const msgs = [
       makeMsg('summarize this', { timestamp: '99' }),
-      makeMsg('/compact', { timestamp: '100' }),
+      makeMsg('!compact', { timestamp: '100' }),
     ];
     const result = await handleSessionCommand({
       missedMessages: msgs,
@@ -156,16 +156,16 @@ describe('handleSessionCommand', () => {
     });
     expect(result).toEqual({ handled: true, success: true });
     expect(deps.formatMessages).toHaveBeenCalledWith([msgs[0]], 'UTC');
-    // Two runAgent calls: pre-compact + /compact
+    // Two runAgent calls: pre-compact + !compact
     expect(deps.runAgent).toHaveBeenCalledTimes(2);
     expect(deps.runAgent).toHaveBeenCalledWith('<formatted>', expect.any(Function));
-    expect(deps.runAgent).toHaveBeenCalledWith('/compact', expect.any(Function));
+    expect(deps.runAgent).toHaveBeenCalledWith('!compact', expect.any(Function));
   });
 
   it('allows is_from_me sender in non-main group', async () => {
     const deps = makeDeps();
     const result = await handleSessionCommand({
-      missedMessages: [makeMsg('/compact', { is_from_me: true })],
+      missedMessages: [makeMsg('!compact', { is_from_me: true })],
       isMainGroup: false,
       groupName: 'test',
       triggerPattern: trigger,
@@ -173,7 +173,7 @@ describe('handleSessionCommand', () => {
       deps,
     });
     expect(result).toEqual({ handled: true, success: true });
-    expect(deps.runAgent).toHaveBeenCalledWith('/compact', expect.any(Function));
+    expect(deps.runAgent).toHaveBeenCalledWith('!compact', expect.any(Function));
   });
 
   it('reports failure when command-stage runAgent returns error without streamed status', async () => {
@@ -183,7 +183,7 @@ describe('handleSessionCommand', () => {
       return 'error';
     })});
     const result = await handleSessionCommand({
-      missedMessages: [makeMsg('/compact')],
+      missedMessages: [makeMsg('!compact')],
       isMainGroup: true,
       groupName: 'test',
       triggerPattern: trigger,
@@ -198,7 +198,7 @@ describe('handleSessionCommand', () => {
     const deps = makeDeps({ runAgent: vi.fn().mockResolvedValue('error') });
     const msgs = [
       makeMsg('summarize this', { timestamp: '99' }),
-      makeMsg('/compact', { timestamp: '100' }),
+      makeMsg('!compact', { timestamp: '100' }),
     ];
     const result = await handleSessionCommand({
       missedMessages: msgs,
