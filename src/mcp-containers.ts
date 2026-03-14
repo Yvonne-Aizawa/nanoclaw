@@ -21,6 +21,44 @@ interface McpContainerSpec {
   readyTimeout?: number;
   /** Host→container volume mounts: "hostPath:containerPath" or "hostPath:containerPath:ro" */
   mounts?: string[];
+  /** CPU limit (fractional cores). Passed as --cpus to docker run. */
+  cpus?: number;
+  /** Memory limit, e.g. "256m" or "1g". Passed as --memory to docker run. */
+  memory?: string;
+}
+
+/**
+ * Prepends the configured registry to an image name.
+ * "nanoclaw-mcp-brave" → "ghcr.io/yourname/nanoclaw-mcp-brave" (if registry set)
+ */
+function resolveImage(localName: string): string {
+  const registry = loadAppConfig().containers?.registry;
+  return registry ? `${registry}/${localName}` : localName;
+}
+
+/**
+ * Pull all images used by active MCP containers plus the agent image.
+ * No-op if no registry is configured.
+ */
+export function pullImages(agentImage: string): void {
+  const registry = loadAppConfig().containers?.registry;
+  if (!registry) return;
+
+  const images = [
+    agentImage,
+    ...buildContainerSpecs().map((s) => s.image),
+  ];
+  const seen = new Set<string>();
+  for (const image of images) {
+    if (seen.has(image)) continue;
+    seen.add(image);
+    logger.info({ image }, 'Pulling image');
+    try {
+      execFileSync(CONTAINER_RUNTIME_BIN, ['pull', image], { stdio: 'inherit' });
+    } catch (err) {
+      logger.error({ err, image }, 'Failed to pull image');
+    }
+  }
 }
 
 /** Expand a leading ~/ to the user's home directory. */
@@ -49,7 +87,7 @@ function buildContainerSpecs(): McpContainerSpec[] {
   if (brave.enabled && brave.token) {
     specs.push({
       name: 'nanoclaw-mcp-brave',
-      image: 'nanoclaw-mcp-brave',
+      image: resolveImage('nanoclaw-mcp-brave'),
       port: 7701,
       env: { BRAVE_API_KEY: brave.token },
     });
@@ -58,7 +96,7 @@ function buildContainerSpecs(): McpContainerSpec[] {
   if (caldav.enabled && caldav.url) {
     specs.push({
       name: 'nanoclaw-mcp-caldav',
-      image: 'nanoclaw-mcp-caldav',
+      image: resolveImage('nanoclaw-mcp-caldav'),
       port: 7702,
       env: {
         CALDAV_URL: caldav.url,
@@ -75,7 +113,7 @@ function buildContainerSpecs(): McpContainerSpec[] {
     if (srv.type === 'npx' || srv.type === 'uvx') {
       specs.push({
         name: containerName,
-        image: `nanoclaw-mcp-${srv.type}`,
+        image: resolveImage(`nanoclaw-mcp-${srv.type}`),
         port: srv.port,
         env: {
           MCP_PACKAGE: srv.package,
@@ -87,6 +125,8 @@ function buildContainerSpecs(): McpContainerSpec[] {
         },
         readyTimeout: 30000, // npx/uvx may need to download packages
         mounts: srv.mounts,
+        cpus: srv.cpus,
+        memory: srv.memory,
       });
     } else if (srv.type === 'remote') {
       const env: Record<string, string> = {
@@ -100,10 +140,12 @@ function buildContainerSpecs(): McpContainerSpec[] {
       }
       specs.push({
         name: containerName,
-        image: 'nanoclaw-mcp-remote',
+        image: resolveImage('nanoclaw-mcp-remote'),
         port: srv.port,
         env,
         mounts: srv.mounts,
+        cpus: srv.cpus,
+        memory: srv.memory,
       });
     }
   }
@@ -130,6 +172,11 @@ function startContainer(spec: McpContainerSpec): void {
     expandMountHome(m),
   ]);
 
+  const resourceArgs = [
+    '--cpus', String(spec.cpus ?? 1),
+    '--memory', spec.memory ?? '512m',
+  ];
+
   const args = [
     'run',
     '-d',
@@ -140,6 +187,7 @@ function startContainer(spec: McpContainerSpec): void {
     '-p',
     `${spec.port}:${spec.port}`,
     ...hostGatewayArgs(),
+    ...resourceArgs,
     ...envArgs,
     ...volumeArgs,
     spec.image,

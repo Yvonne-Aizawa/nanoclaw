@@ -29,6 +29,10 @@ export interface McpStdioServerConfig {
    * hostPath supports ~ expansion (resolved on the host).
    */
   mounts?: string[];
+  /** CPU limit (fractional cores). Example: 0.5. Defaults to 1. */
+  cpus?: number;
+  /** Memory limit. Example: "256m", "1g". Defaults to "512m". */
+  memory?: string;
 }
 
 /** A remote MCP server proxied through a container that injects auth headers. */
@@ -50,6 +54,10 @@ export interface McpRemoteServerConfig {
    * hostPath supports ~ expansion (resolved on the host).
    */
   mounts?: string[];
+  /** CPU limit (fractional cores). Example: 0.5. Defaults to 1. */
+  cpus?: number;
+  /** Memory limit. Example: "256m", "1g". Defaults to "512m". */
+  memory?: string;
 }
 
 export type McpServerConfig = McpStdioServerConfig | McpRemoteServerConfig;
@@ -78,6 +86,21 @@ export interface AppConfig {
   /** Additional MCP servers to sandbox in containers. */
   mcp?: {
     servers?: Array<{ name: string } & McpServerConfig>;
+  };
+  /**
+   * Vision (image) support. Enabled by default.
+   * Set enabled: false when using a model that does not support vision.
+   */
+  vision?: {
+    enabled: boolean;
+  };
+  /**
+   * Container image settings.
+   * Set registry to pull images from a remote registry on startup instead of using locally built images.
+   * Example: "ghcr.io/yourname"
+   */
+  containers?: {
+    registry?: string;
   };
 }
 

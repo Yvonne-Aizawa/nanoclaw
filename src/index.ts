@@ -3,6 +3,7 @@ import path from 'path';
 
 import {
   ASSISTANT_NAME,
+  CONTAINER_IMAGE,
   CREDENTIAL_PROXY_PORT,
   IDLE_TIMEOUT,
   POLL_INTERVAL,
@@ -46,7 +47,8 @@ import {
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
-import { startMcpContainers, stopMcpContainers } from './mcp-containers.js';
+import { pullImages, startMcpContainers, stopMcpContainers } from './mcp-containers.js';
+import { loadAppConfig } from './app-config.js';
 import { initBotPool } from './channels/telegram.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
 import {
@@ -223,12 +225,16 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   const prompt = formatMessages(missedMessages, TIMEZONE);
 
   // Collect image attachments from messages (pass all images in batch to agent)
-  const imageAttachments = missedMessages
-    .filter((m) => m.image_data)
-    .map((m) => ({
-      data: m.image_data!,
-      media_type: m.image_media_type || 'image/jpeg',
-    }));
+  // Vision is enabled by default; set vision.enabled: false in config.json to disable.
+  const visionEnabled = loadAppConfig().vision?.enabled !== false;
+  const imageAttachments = visionEnabled
+    ? missedMessages
+        .filter((m) => m.image_data)
+        .map((m) => ({
+          data: m.image_data!,
+          media_type: m.image_media_type || 'image/jpeg',
+        }))
+    : [];
 
   // Advance cursor so the piping path in startMessageLoop won't re-fetch
   // these messages. Save the old cursor so we can roll back on error.
@@ -566,7 +572,12 @@ async function main(): Promise<void> {
   logger.info('Database initialized');
   loadState();
 
-  // Start sandboxed MCP server containers (brave, caldav) before channels connect
+  // Pull images from registry if configured, then start MCP containers
+  const { containers } = loadAppConfig();
+  const agentImage = containers?.registry
+    ? `${containers.registry}/nanoclaw-agent:latest`
+    : CONTAINER_IMAGE;
+  pullImages(agentImage);
   await startMcpContainers();
 
   // Start credential proxy (containers route API calls through this)

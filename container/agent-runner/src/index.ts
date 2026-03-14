@@ -450,7 +450,15 @@ async function runQuery(
   }
 
   const { servers: mcpServerMap, mountDescription } = parseMcpServers();
-  const systemPromptAppend = [globalClaudeMd, mountDescription].filter(Boolean).join('\n\n');
+
+  // Load the custom system prompt file (extracted from the claude_code preset via tweakcc).
+  // Edit container/agent-runner/system-prompt.md to customize the system prompt.
+  const customSystemPromptPath = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'system-prompt.md');
+  const baseSystemPrompt = fs.existsSync(customSystemPromptPath)
+    ? fs.readFileSync(customSystemPromptPath, 'utf-8')
+    : undefined;
+
+  const systemPrompt = [baseSystemPrompt, globalClaudeMd, mountDescription].filter(Boolean).join('\n\n');
 
   // Discover additional directories mounted at /workspace/extra/*
   // These are passed to the SDK so their CLAUDE.md files are loaded automatically
@@ -475,9 +483,7 @@ async function runQuery(
       additionalDirectories: extraDirs.length > 0 ? extraDirs : undefined,
       resume: sessionId,
       resumeSessionAt: resumeAt,
-      systemPrompt: systemPromptAppend
-        ? { type: 'preset' as const, preset: 'claude_code' as const, append: systemPromptAppend }
-        : undefined,
+      systemPrompt: systemPrompt || undefined,
       allowedTools: [
         'Bash',
         'Read', 'Write', 'Edit', 'Glob', 'Grep',

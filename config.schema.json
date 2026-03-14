@@ -1,0 +1,185 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "NanoClaw config.json",
+  "type": "object",
+  "required": ["ai"],
+  "properties": {
+    "ai": {
+      "type": "object",
+      "required": ["type", "api", "oauth", "token"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["api", "oauth", "token"],
+          "description": "Which AI endpoint to use"
+        },
+        "api": { "$ref": "#/$defs/aiEndpoint" },
+        "oauth": { "$ref": "#/$defs/aiEndpoint" },
+        "token": { "$ref": "#/$defs/aiEndpoint" }
+      }
+    },
+    "telegram": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "main_bot_token": { "type": "string" },
+        "bot_swarm_tokens": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "brave": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "token": { "type": "string" }
+      }
+    },
+    "caldav": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "url": { "type": "string" },
+        "username": { "type": "string" },
+        "password": { "type": "string" }
+      }
+    },
+    "mcp": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "servers": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              { "$ref": "#/$defs/mcpNpxServer" },
+              { "$ref": "#/$defs/mcpUvxServer" },
+              { "$ref": "#/$defs/mcpRemoteServer" }
+            ]
+          }
+        }
+      }
+    },
+    "vision": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Set false to disable image/vision for models that don't support it"
+        }
+      }
+    },
+    "containers": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "registry": {
+          "type": "string",
+          "description": "Registry prefix for pulling images on startup. Example: \"ghcr.io/yourname\""
+        }
+      }
+    }
+  },
+  "$defs": {
+    "aiEndpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "endpoint": { "type": "string", "description": "Custom API endpoint URL" },
+        "key": { "type": "string" },
+        "model": { "type": "string", "description": "Model ID override" }
+      }
+    },
+    "mcpResourceLimits": {
+      "type": "object",
+      "properties": {
+        "cpus": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "CPU limit in fractional cores. Defaults to 1."
+        },
+        "memory": {
+          "type": "string",
+          "pattern": "^[0-9]+(b|k|m|g|kb|mb|gb)$",
+          "description": "Memory limit e.g. \"256m\", \"1g\". Defaults to \"512m\"."
+        },
+        "mounts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[^:]+:[^:]+(:(ro|rw))?$",
+            "description": "hostPath:containerPath or hostPath:containerPath:ro"
+          },
+          "description": "Host paths to mount into the MCP container"
+        }
+      }
+    },
+    "mcpNpxServer": {
+      "allOf": [{ "$ref": "#/$defs/mcpResourceLimits" }],
+      "type": "object",
+      "required": ["name", "type", "package", "port"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "description": "Unique container name suffix" },
+        "type": { "type": "string", "const": "npx" },
+        "package": { "type": "string", "description": "npm package to run via npx" },
+        "port": { "type": "integer", "minimum": 1024, "maximum": 65535 },
+        "env": { "type": "object", "additionalProperties": { "type": "string" } },
+        "args": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Extra CLI arguments passed to the subprocess after the package name"
+        },
+        "mounts": true,
+        "cpus": true,
+        "memory": true
+      }
+    },
+    "mcpUvxServer": {
+      "allOf": [{ "$ref": "#/$defs/mcpResourceLimits" }],
+      "type": "object",
+      "required": ["name", "type", "package", "port"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "description": "Unique container name suffix" },
+        "type": { "type": "string", "const": "uvx" },
+        "package": { "type": "string", "description": "Python package to run via uvx" },
+        "port": { "type": "integer", "minimum": 1024, "maximum": 65535 },
+        "env": { "type": "object", "additionalProperties": { "type": "string" } },
+        "args": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Extra CLI arguments passed to the subprocess after the package name"
+        },
+        "mounts": true,
+        "cpus": true,
+        "memory": true
+      }
+    },
+    "mcpRemoteServer": {
+      "allOf": [{ "$ref": "#/$defs/mcpResourceLimits" }],
+      "type": "object",
+      "required": ["name", "type", "url", "port"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "description": "Unique container name suffix" },
+        "type": { "type": "string", "const": "remote" },
+        "url": { "type": "string", "format": "uri", "description": "Upstream MCP server URL" },
+        "port": { "type": "integer", "minimum": 1024, "maximum": 65535 },
+        "headers": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "HTTP headers injected into every upstream request (stay in proxy container)"
+        },
+        "mounts": true,
+        "cpus": true,
+        "memory": true
+      }
+    }
+  }
+}
