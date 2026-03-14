@@ -15,6 +15,9 @@ import { DATA_DIR } from './config.js';
 import { CONTAINER_RUNTIME_BIN, hostGatewayArgs } from './container-runtime.js';
 import { logger } from './logger.js';
 
+/** Private Docker network shared by all MCP containers and agent containers. */
+export const NANOCLAW_NETWORK = 'nanoclaw-net';
+
 interface McpContainerSpec {
   name: string;
   image: string;
@@ -170,6 +173,24 @@ function buildContainerSpecs(): McpContainerSpec[] {
   return specs;
 }
 
+/** Create the private Docker network if it doesn't already exist. */
+function ensureNetwork(): void {
+  try {
+    execFileSync(
+      CONTAINER_RUNTIME_BIN,
+      ['network', 'inspect', NANOCLAW_NETWORK],
+      { stdio: 'pipe' },
+    );
+  } catch {
+    execFileSync(
+      CONTAINER_RUNTIME_BIN,
+      ['network', 'create', NANOCLAW_NETWORK],
+      { stdio: 'pipe' },
+    );
+    logger.info({ network: NANOCLAW_NETWORK }, 'Created Docker network');
+  }
+}
+
 function stopAndRemove(name: string): void {
   try {
     execSync(`${CONTAINER_RUNTIME_BIN} rm -f ${name}`, { stdio: 'pipe' });
@@ -203,8 +224,8 @@ function startContainer(spec: McpContainerSpec): void {
     spec.name,
     '--restart',
     'unless-stopped',
-    '-p',
-    `${spec.port}:${spec.port}`,
+    '--network',
+    NANOCLAW_NETWORK,
     ...hostGatewayArgs(),
     ...resourceArgs,
     ...envArgs,
@@ -216,40 +237,43 @@ function startContainer(spec: McpContainerSpec): void {
   execFileSync(CONTAINER_RUNTIME_BIN, args, { stdio: 'pipe' });
 }
 
-async function waitReady(port: number, timeoutMs = 10000): Promise<void> {
+async function waitReady(
+  containerName: string,
+  port: number,
+  timeoutMs = 10000,
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
+  // Probe the server from inside the container using Node's built-in fetch.
+  // No ports are published to the host, so we can't probe from outside.
+  const nodeScript = [
+    `fetch('http://localhost:${port}/mcp',{`,
+    `method:'POST',`,
+    `headers:{'Content-Type':'application/json','Accept':'application/json, text/event-stream'},`,
+    `body:JSON.stringify({jsonrpc:'2.0',method:'initialize',id:1,params:{protocolVersion:'2024-11-05',capabilities:{},clientInfo:{name:'probe',version:'0'}}})`,
+    `}).then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))`,
+  ].join('');
+
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(`http://127.0.0.1:${port}/mcp`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json, text/event-stream',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'initialize',
-          id: 1,
-          params: {
-            protocolVersion: '2024-11-05',
-            capabilities: {},
-            clientInfo: { name: 'probe', version: '0' },
-          },
-        }),
-        signal: AbortSignal.timeout(1000),
-      });
-      if (res.status < 500) return; // Any non-5xx means server is up
+      execFileSync(
+        CONTAINER_RUNTIME_BIN,
+        ['exec', containerName, 'node', '-e', nodeScript],
+        { stdio: 'pipe' },
+      );
+      return; // exit code 0 → server is up
     } catch {
       // Not ready yet
     }
     await new Promise((r) => setTimeout(r, 500));
   }
   throw new Error(
-    `MCP server on port ${port} did not become ready within ${timeoutMs}ms`,
+    `MCP server ${containerName} did not become ready within ${timeoutMs}ms`,
   );
 }
 
 export async function startMcpContainers(): Promise<void> {
+  ensureNetwork();
+
   const specs = buildContainerSpecs();
   if (specs.length === 0) return;
 
@@ -267,7 +291,7 @@ export async function startMcpContainers(): Promise<void> {
     }
 
     try {
-      await waitReady(spec.port, spec.readyTimeout);
+      await waitReady(spec.name, spec.port, spec.readyTimeout);
       logger.info({ name: spec.name, port: spec.port }, 'MCP container ready');
     } catch (err) {
       logger.warn(
@@ -303,27 +327,32 @@ export function getMcpServerUrls(): Array<{
   mounts?: McpMount[];
 }> {
   const { brave, caldav, browser, mcp } = loadAppConfig();
-  const GATEWAY = 'host.docker.internal';
   const servers: Array<{ name: string; url: string; mounts?: McpMount[] }> = [];
 
+  // Containers are reachable by name within the shared Docker network.
+  // No host ports are published — traffic stays inside nanoclaw-net.
   if (browser?.enabled) {
+    const port = browser.port ?? 7703;
     servers.push({
       name: 'playwright',
-      url: `http://${GATEWAY}:${browser.port ?? 7703}/mcp`,
+      url: `http://nanoclaw-mcp-playwright:${port}/mcp`,
       mounts: [{ containerPath: '/shared', readonly: false }],
     });
   }
   if (brave.enabled && brave.token) {
-    servers.push({ name: 'brave', url: `http://${GATEWAY}:7701/mcp` });
+    servers.push({ name: 'brave', url: `http://nanoclaw-mcp-brave:7701/mcp` });
   }
   if (caldav.enabled && caldav.url) {
-    servers.push({ name: 'caldav', url: `http://${GATEWAY}:7702/mcp` });
+    servers.push({
+      name: 'caldav',
+      url: `http://nanoclaw-mcp-caldav:7702/mcp`,
+    });
   }
   for (const srv of mcp?.servers ?? []) {
     const mounts = parseMounts(srv.mounts);
     servers.push({
       name: srv.name,
-      url: `http://${GATEWAY}:${srv.port}/mcp`,
+      url: `http://nanoclaw-mcp-${srv.name}:${srv.port}/mcp`,
       ...(mounts.length > 0 ? { mounts } : {}),
     });
   }

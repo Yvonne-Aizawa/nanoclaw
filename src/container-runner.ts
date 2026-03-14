@@ -17,7 +17,7 @@ import {
   TIMEZONE,
 } from './config.js';
 import { loadAppConfig } from './app-config.js';
-import { getMcpServerUrls } from './mcp-containers.js';
+import { getMcpServerUrls, NANOCLAW_NETWORK } from './mcp-containers.js';
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
 import { logger } from './logger.js';
 import {
@@ -212,7 +212,11 @@ function buildVolumeMounts(
   if (browser?.enabled) {
     const sharedDir = path.join(DATA_DIR, 'playwright-shared');
     fs.mkdirSync(sharedDir, { recursive: true });
-    mounts.push({ hostPath: sharedDir, containerPath: '/shared', readonly: false });
+    mounts.push({
+      hostPath: sharedDir,
+      containerPath: '/shared',
+      readonly: false,
+    });
   }
 
   // Additional mounts validated against external allowlist (tamper-proof from containers)
@@ -261,6 +265,9 @@ function buildContainerArgs(
   } else {
     args.push('-e', 'CLAUDE_CODE_OAUTH_TOKEN=placeholder');
   }
+
+  // Join the private MCP network so containers are reachable by name
+  args.push('--network', NANOCLAW_NETWORK);
 
   // Runtime-specific args for host gateway resolution
   args.push(...hostGatewayArgs());
