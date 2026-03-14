@@ -38,3 +38,4 @@ test.json
 .nanoclaw/
 
 agents-sdk-docs
+system-prompt-base.md
