@@ -296,10 +296,16 @@ export function getMcpServerUrls(): Array<{
   url: string;
   mounts?: McpMount[];
 }> {
-  const { brave, caldav, mcp } = loadAppConfig();
+  const { brave, caldav, browser, mcp } = loadAppConfig();
   const GATEWAY = 'host.docker.internal';
   const servers: Array<{ name: string; url: string; mounts?: McpMount[] }> = [];
 
+  if (browser?.enabled) {
+    servers.push({
+      name: 'playwright',
+      url: `http://${GATEWAY}:${browser.port ?? 7703}/mcp`,
+    });
+  }
   if (brave.enabled && brave.token) {
     servers.push({ name: 'brave', url: `http://${GATEWAY}:7701/mcp` });
   }
