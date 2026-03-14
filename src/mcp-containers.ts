@@ -6,9 +6,12 @@
  */
 
 import { execFileSync, execSync } from 'child_process';
+import fs from 'fs';
 import os from 'os';
+import path from 'path';
 
 import { loadAppConfig } from './app-config.js';
+import { DATA_DIR } from './config.js';
 import { CONTAINER_RUNTIME_BIN, hostGatewayArgs } from './container-runtime.js';
 import { logger } from './logger.js';
 
@@ -85,6 +88,8 @@ function buildContainerSpecs(): McpContainerSpec[] {
 
   if (browser?.enabled) {
     const port = browser.port ?? 7703;
+    const sharedDir = path.join(DATA_DIR, 'playwright-shared');
+    fs.mkdirSync(sharedDir, { recursive: true });
     specs.push({
       name: 'nanoclaw-mcp-playwright',
       image: resolveImage('nanoclaw-mcp-playwright'),
@@ -92,6 +97,7 @@ function buildContainerSpecs(): McpContainerSpec[] {
       env: { MCP_PORT: String(port) },
       readyTimeout: 30000,
       memory: browser.memory ?? '1g',
+      mounts: [`${sharedDir}:/shared`],
     });
   }
 
@@ -304,6 +310,7 @@ export function getMcpServerUrls(): Array<{
     servers.push({
       name: 'playwright',
       url: `http://${GATEWAY}:${browser.port ?? 7703}/mcp`,
+      mounts: [{ containerPath: '/shared', readonly: false }],
     });
   }
   if (brave.enabled && brave.token) {

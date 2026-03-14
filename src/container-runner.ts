@@ -206,6 +206,15 @@ function buildVolumeMounts(
     readonly: false,
   });
 
+  // Playwright shared directory: same path in both playwright and agent containers
+  // so playwright can write screenshots/files that the agent can read.
+  const { browser } = loadAppConfig();
+  if (browser?.enabled) {
+    const sharedDir = path.join(DATA_DIR, 'playwright-shared');
+    fs.mkdirSync(sharedDir, { recursive: true });
+    mounts.push({ hostPath: sharedDir, containerPath: '/shared', readonly: false });
+  }
+
   // Additional mounts validated against external allowlist (tamper-proof from containers)
   if (group.containerConfig?.additionalMounts) {
     const validatedMounts = validateAdditionalMounts(
