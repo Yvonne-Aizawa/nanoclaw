@@ -34,3 +34,6 @@ RUN npm install -g @playwright/mcp
 
 # Default package — the bridge reads MCP_PACKAGE at runtime
 ENV MCP_PACKAGE=@playwright/mcp
+
+# Required for running Chromium as root inside a container
+ENV MCP_ARGS='["--no-sandbox"]'
