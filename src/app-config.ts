@@ -88,6 +88,17 @@ export interface AppConfig {
     servers?: Array<{ name: string } & McpServerConfig>;
   };
   /**
+   * Browser automation via @playwright/mcp in a dedicated container.
+   * When enabled, the agent can control a browser via MCP tools.
+   */
+  browser?: {
+    enabled: boolean;
+    /** Host port for the Playwright MCP container. Defaults to 7703. */
+    port?: number;
+    /** Memory limit. Defaults to "1g" (browsers are memory-hungry). */
+    memory?: string;
+  };
+  /**
    * Vision (image) support. Enabled by default.
    * Set enabled: false when using a model that does not support vision.
    */

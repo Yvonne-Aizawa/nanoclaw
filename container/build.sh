@@ -30,6 +30,10 @@ ${CONTAINER_RUNTIME} build --no-cache -t "nanoclaw-mcp-uvx:${TAG}" mcp-uvx/
 echo "Building remote MCP proxy image..."
 ${CONTAINER_RUNTIME} build --no-cache -t "nanoclaw-mcp-remote:${TAG}" mcp-remote/
 
+# Playwright MCP image (extends mcp-npx, adds Chromium)
+echo "Building Playwright MCP image..."
+${CONTAINER_RUNTIME} build --no-cache -t "nanoclaw-mcp-playwright:${TAG}" mcp-playwright/
+
 # Build main agent image
 IMAGE_NAME="nanoclaw-agent"
 echo "Building NanoClaw agent container image..."
@@ -38,7 +42,8 @@ ${CONTAINER_RUNTIME} build --no-cache -t "${IMAGE_NAME}:${TAG}" .
 echo ""
 echo "Build complete!"
 echo "Images: nanoclaw-mcp-base, nanoclaw-mcp-brave, nanoclaw-mcp-caldav,"
-echo "        nanoclaw-mcp-npx, nanoclaw-mcp-uvx, nanoclaw-mcp-remote, ${IMAGE_NAME}"
+echo "        nanoclaw-mcp-npx, nanoclaw-mcp-uvx, nanoclaw-mcp-remote,"
+echo "        nanoclaw-mcp-playwright, ${IMAGE_NAME}"
 echo ""
 echo "Test agent with:"
 echo "  echo '{\"prompt\":\"What is 2+2?\",\"groupFolder\":\"test\",\"chatJid\":\"test@g.us\",\"isMain\":false}' | ${CONTAINER_RUNTIME} run -i ${IMAGE_NAME}:${TAG}"

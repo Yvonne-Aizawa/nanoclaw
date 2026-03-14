@@ -80,8 +80,20 @@ function expandMountHome(mount: string): string {
 }
 
 function buildContainerSpecs(): McpContainerSpec[] {
-  const { brave, caldav, mcp } = loadAppConfig();
+  const { brave, caldav, browser, mcp } = loadAppConfig();
   const specs: McpContainerSpec[] = [];
+
+  if (browser?.enabled) {
+    const port = browser.port ?? 7703;
+    specs.push({
+      name: 'nanoclaw-mcp-playwright',
+      image: resolveImage('nanoclaw-mcp-playwright'),
+      port,
+      env: { MCP_PORT: String(port) },
+      readyTimeout: 30000,
+      memory: browser.memory ?? '1g',
+    });
+  }
 
   if (brave.enabled && brave.token) {
     specs.push({
