@@ -47,7 +47,11 @@ import {
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
-import { pullImages, startMcpContainers, stopMcpContainers } from './mcp-containers.js';
+import {
+  pullImages,
+  startMcpContainers,
+  stopMcpContainers,
+} from './mcp-containers.js';
 import { loadAppConfig } from './app-config.js';
 import { initBotPool } from './channels/telegram.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';

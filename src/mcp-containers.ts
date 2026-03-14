@@ -44,17 +44,16 @@ export function pullImages(agentImage: string): void {
   const registry = loadAppConfig().containers?.registry;
   if (!registry) return;
 
-  const images = [
-    agentImage,
-    ...buildContainerSpecs().map((s) => s.image),
-  ];
+  const images = [agentImage, ...buildContainerSpecs().map((s) => s.image)];
   const seen = new Set<string>();
   for (const image of images) {
     if (seen.has(image)) continue;
     seen.add(image);
     logger.info({ image }, 'Pulling image');
     try {
-      execFileSync(CONTAINER_RUNTIME_BIN, ['pull', image], { stdio: 'inherit' });
+      execFileSync(CONTAINER_RUNTIME_BIN, ['pull', image], {
+        stdio: 'inherit',
+      });
     } catch (err) {
       logger.error({ err, image }, 'Failed to pull image');
     }
@@ -173,8 +172,10 @@ function startContainer(spec: McpContainerSpec): void {
   ]);
 
   const resourceArgs = [
-    '--cpus', String(spec.cpus ?? 1),
-    '--memory', spec.memory ?? '512m',
+    '--cpus',
+    String(spec.cpus ?? 1),
+    '--memory',
+    spec.memory ?? '512m',
   ];
 
   const args = [
