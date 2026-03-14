@@ -6,7 +6,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  OWNER: ${{ github.repository_owner }}
 
 jobs:
   build:
@@ -25,37 +24,39 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set CalVer tag
-        id: tag
-        run: echo "VERSION=$(date +'%Y.%m.%d')" >> $GITHUB_OUTPUT
+      - name: Set build metadata
+        id: meta
+        run: |
+          echo "VERSION=$(date +'%Y.%m.%d')" >> $GITHUB_OUTPUT
+          echo "OWNER=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
       - name: Build MCP base
         run: |
           docker build --no-cache \
             -t nanoclaw-mcp-base \
-            -t ${{ env.REGISTRY }}/${{ env.OWNER }}/nanoclaw-mcp-base:${{ steps.tag.outputs.VERSION }} \
-            -t ${{ env.REGISTRY }}/${{ env.OWNER }}/nanoclaw-mcp-base:latest \
+            -t ${{ env.REGISTRY }}/${{ steps.meta.outputs.OWNER }}/nanoclaw-mcp-base:${{ steps.meta.outputs.VERSION }} \
+            -t ${{ env.REGISTRY }}/${{ steps.meta.outputs.OWNER }}/nanoclaw-mcp-base:latest \
             container/mcp-base/
 
       - name: Build MCP child images
         run: |
           for name in mcp-brave mcp-caldav mcp-npx mcp-uvx mcp-remote; do
             docker build --no-cache \
-              -t ${{ env.REGISTRY }}/${{ env.OWNER }}/nanoclaw-${name}:${{ steps.tag.outputs.VERSION }} \
-              -t ${{ env.REGISTRY }}/${{ env.OWNER }}/nanoclaw-${name}:latest \
+              -t ${{ env.REGISTRY }}/${{ steps.meta.outputs.OWNER }}/nanoclaw-${name}:${{ steps.meta.outputs.VERSION }} \
+              -t ${{ env.REGISTRY }}/${{ steps.meta.outputs.OWNER }}/nanoclaw-${name}:latest \
               container/${name}/
           done
 
       - name: Build agent image
         run: |
           docker build --no-cache \
-            -t ${{ env.REGISTRY }}/${{ env.OWNER }}/nanoclaw-agent:${{ steps.tag.outputs.VERSION }} \
-            -t ${{ env.REGISTRY }}/${{ env.OWNER }}/nanoclaw-agent:latest \
+            -t ${{ env.REGISTRY }}/${{ steps.meta.outputs.OWNER }}/nanoclaw-agent:${{ steps.meta.outputs.VERSION }} \
+            -t ${{ env.REGISTRY }}/${{ steps.meta.outputs.OWNER }}/nanoclaw-agent:latest \
             container/
 
       - name: Push all images
         run: |
           for name in nanoclaw-mcp-base nanoclaw-mcp-brave nanoclaw-mcp-caldav nanoclaw-mcp-npx nanoclaw-mcp-uvx nanoclaw-mcp-remote nanoclaw-agent; do
-            docker push ${{ env.REGISTRY }}/${{ env.OWNER }}/${name}:${{ steps.tag.outputs.VERSION }}
-            docker push ${{ env.REGISTRY }}/${{ env.OWNER }}/${name}:latest
+            docker push ${{ env.REGISTRY }}/${{ steps.meta.outputs.OWNER }}/${name}:${{ steps.meta.outputs.VERSION }}
+            docker push ${{ env.REGISTRY }}/${{ steps.meta.outputs.OWNER }}/${name}:latest
           done
