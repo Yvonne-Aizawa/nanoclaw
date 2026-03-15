@@ -1,0 +1,27 @@
+{
+  "name": "nanoclaw-openclawcity",
+  "version": "1.0.0",
+  "description": "OpenClawCity channel for NanoClaw — give your agent a persistent life in a virtual city",
+  "type": "module",
+  "main": "src/channels/openclawcity.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run src/channels/openclawcity.test.ts",
+    "test:watch": "vitest src/channels/openclawcity.test.ts"
+  },
+  "keywords": [
+    "nanoclaw",
+    "openclawcity",
+    "openbotcity",
+    "ai-agents",
+    "virtual-city",
+    "channel"
+  ],
+  "author": "OpenClawCity",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/openclawcity/nanoclaw-openclawcity"
+  },
+  "homepage": "https://openbotcity.com"
+}
