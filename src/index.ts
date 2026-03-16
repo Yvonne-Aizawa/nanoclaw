@@ -663,7 +663,10 @@ async function main(): Promise<void> {
             logger.error({ err, chatJid }, 'Remote control command error'),
           );
         } else {
-          logger.warn({ chatJid }, 'Remote control command received but feature is disabled');
+          logger.warn(
+            { chatJid },
+            'Remote control command received but feature is disabled',
+          );
         }
         return;
       }

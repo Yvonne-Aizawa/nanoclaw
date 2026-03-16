@@ -44,7 +44,10 @@ export const CONTAINER_IMAGE =
 const DEFAULT_AGENT_TIMEOUT_MS = 600_000; // 10 minutes
 export const CONTAINER_TIMEOUT =
   appConfig.agent?.timeoutMs ??
-  parseInt(process.env.CONTAINER_TIMEOUT || String(DEFAULT_AGENT_TIMEOUT_MS), 10);
+  parseInt(
+    process.env.CONTAINER_TIMEOUT || String(DEFAULT_AGENT_TIMEOUT_MS),
+    10,
+  );
 export const CONTAINER_MAX_OUTPUT_SIZE = parseInt(
   process.env.CONTAINER_MAX_OUTPUT_SIZE || '10485760',
   10,
