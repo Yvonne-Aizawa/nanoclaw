@@ -121,6 +121,16 @@ export interface AppConfig {
   remoteControl?: {
     enabled: boolean;
   };
+  /**
+   * Agent run limits. Controls how long a container agent is allowed to run.
+   */
+  agent?: {
+    /**
+     * Maximum time in milliseconds an agent container may run before being killed.
+     * Defaults to 600000 (10 minutes).
+     */
+    timeoutMs?: number;
+  };
 }
 
 let _config: AppConfig | null = null;
