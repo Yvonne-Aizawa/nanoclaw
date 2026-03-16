@@ -136,6 +136,15 @@ export interface AppConfig {
     port?: number;
   };
   /**
+   * Heartbeat — proactive scheduled runs per group.
+   * If a group has a heartbeat.md file, the agent reads it on this interval
+   * and acts on any instructions. No LLM call if the file is missing or empty.
+   */
+  heartbeat?: {
+    /** Interval in ms between heartbeat runs. Defaults to 1800000 (30 min). */
+    intervalMs?: number;
+  };
+  /**
    * Agent run limits. Controls how long a container agent is allowed to run.
    */
   agent?: {

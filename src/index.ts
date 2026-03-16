@@ -74,6 +74,7 @@ import {
   isSessionCommandAllowed,
 } from './session-commands.js';
 import { startSchedulerLoop } from './task-scheduler.js';
+import { startHeartbeatWatcher } from './heartbeat.js';
 import { Channel, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
 
@@ -740,6 +741,7 @@ async function main(): Promise<void> {
   }
 
   // Start subsystems (independently of connection handler)
+  startHeartbeatWatcher(() => registeredGroups);
   startSchedulerLoop({
     registeredGroups: () => registeredGroups,
     getSessions: () => sessions,

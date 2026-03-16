@@ -4,6 +4,10 @@ import fs from 'fs';
 
 import { ASSISTANT_NAME, SCHEDULER_POLL_INTERVAL, TIMEZONE } from './config.js';
 import {
+  HEARTBEAT_TASK_PREFIX,
+  readHeartbeatContent,
+} from './heartbeat.js';
+import {
   ContainerOutput,
   runContainerAgent,
   writeTasksSnapshot,
@@ -148,6 +152,24 @@ async function runTask(
 
   let result: string | null = null;
   let error: string | null = null;
+
+  // Heartbeat tasks: read the file at run time and skip if missing/empty.
+  if (task.id.startsWith(HEARTBEAT_TASK_PREFIX)) {
+    const content = readHeartbeatContent(task.group_folder);
+    if (!content) {
+      logger.debug(
+        { taskId: task.id },
+        'Heartbeat skipped — heartbeat.md missing or empty',
+      );
+      const nextRun = computeNextRun(task);
+      updateTaskAfterRun(task.id, nextRun, 'Skipped (empty)');
+      return;
+    }
+    task = {
+      ...task,
+      prompt: `You are running a scheduled heartbeat check.\n\n${content}`,
+    };
+  }
 
   // For group context mode, use the group's current session
   const sessions = deps.getSessions();
