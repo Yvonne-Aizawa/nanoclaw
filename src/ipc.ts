@@ -3,7 +3,7 @@ import path from 'path';
 
 import { CronExpressionParser } from 'cron-parser';
 
-import { DATA_DIR, IPC_POLL_INTERVAL, TIMEZONE } from './config.js';
+import { DATA_DIR, GROUPS_DIR, IPC_POLL_INTERVAL, TIMEZONE } from './config.js';
 import { sendPoolMessage } from './channels/telegram.js';
 import { AvailableGroup } from './container-runner.js';
 import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
@@ -13,6 +13,7 @@ import { RegisteredGroup } from './types.js';
 
 export interface IpcDeps {
   sendMessage: (jid: string, text: string) => Promise<void>;
+  sendFile?: (jid: string, filePath: string, caption?: string) => Promise<void>;
   registeredGroups: () => Record<string, RegisteredGroup>;
   registerGroup: (jid: string, group: RegisteredGroup) => void;
   syncGroups: (force: boolean) => Promise<void>;
@@ -23,6 +24,26 @@ export interface IpcDeps {
     availableGroups: AvailableGroup[],
     registeredJids: Set<string>,
   ) => void;
+}
+
+/**
+ * Translate a container-side file path to the corresponding host path.
+ * /workspace/group/... → workspace/groups/<folder>/...
+ * /shared/...          → workspace/data/playwright-shared/...
+ */
+function resolveAgentFilePath(
+  sourceGroup: string,
+  containerPath: string,
+): string | null {
+  if (containerPath.startsWith('/workspace/group/')) {
+    const rel = containerPath.slice('/workspace/group/'.length);
+    return path.join(GROUPS_DIR, sourceGroup, rel);
+  }
+  if (containerPath.startsWith('/shared/')) {
+    const rel = containerPath.slice('/shared/'.length);
+    return path.join(DATA_DIR, 'playwright-shared', rel);
+  }
+  return null;
 }
 
 let ipcWatcherRunning = false;
@@ -99,6 +120,47 @@ export function startIpcWatcher(deps: IpcDeps): void {
                   logger.warn(
                     { chatJid: data.chatJid, sourceGroup },
                     'Unauthorized IPC message attempt blocked',
+                  );
+                }
+              } else if (
+                data.type === 'file' &&
+                data.chatJid &&
+                data.filePath &&
+                deps.sendFile
+              ) {
+                const targetGroup = registeredGroups[data.chatJid];
+                if (
+                  isMain ||
+                  (targetGroup && targetGroup.folder === sourceGroup)
+                ) {
+                  const hostPath = resolveAgentFilePath(
+                    sourceGroup,
+                    data.filePath,
+                  );
+                  if (hostPath) {
+                    await deps.sendFile(
+                      data.chatJid,
+                      hostPath,
+                      data.caption,
+                    );
+                    logger.info(
+                      {
+                        chatJid: data.chatJid,
+                        sourceGroup,
+                        filePath: data.filePath,
+                      },
+                      'IPC file sent',
+                    );
+                  } else {
+                    logger.warn(
+                      { filePath: data.filePath, sourceGroup },
+                      'IPC file: cannot resolve container path to host path',
+                    );
+                  }
+                } else {
+                  logger.warn(
+                    { chatJid: data.chatJid, sourceGroup },
+                    'Unauthorized IPC file attempt blocked',
                   );
                 }
               }

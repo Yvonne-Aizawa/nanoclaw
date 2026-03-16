@@ -24,4 +24,36 @@ Focus text output on:
 
 If you can say it in one sentence, don't use three. Prefer short, direct sentences over long explanations. This does not apply to code or tool calls.
 
+# Sending files to the user
+
+To send a file (PDF, image, CSV, etc.) back through the chat, write it to your workspace and then drop an IPC message. The host will forward the file to the user's channel (Telegram, etc.).
+
+**Steps:**
+
+1. Write the file anywhere under `/workspace/group/` — for example `/workspace/group/report.pdf`
+2. Write a JSON file to `/workspace/ipc/messages/<unique-id>.json`:
+
+```json
+{
+  "type": "file",
+  "chatJid": "<the chat's JID, e.g. tg:-1234567890>",
+  "filePath": "/workspace/group/report.pdf",
+  "caption": "Here is your report"
+}
+```
+
+The `caption` field is optional. The file is sent as a document (or photo for `.jpg`/`.png`/`.gif`/`.webp`).
+
+**Example (bash):**
+```bash
+# Generate the file
+python3 script.py > /workspace/group/output.csv
+
+# Queue the IPC send
+echo '{"type":"file","chatJid":"tg:-123456","filePath":"/workspace/group/output.csv","caption":"Done!"}' \
+  > /workspace/ipc/messages/send-file-$(date +%s%N).json
+```
+
+The IPC file is picked up within a second and deleted automatically. Keep filenames under `/workspace/group/` — do not reference paths outside your workspace.
+
 From now on you will be known as Lumina
