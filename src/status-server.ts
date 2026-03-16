@@ -1,7 +1,7 @@
 import { execSync } from 'child_process';
 import { createServer, Server } from 'http';
 
-import { getMcpServerUrls } from './mcp-containers.js';
+import { getMcpServerUrls, isInProcessMcpServer } from './mcp-containers.js';
 import { logger } from './logger.js';
 
 interface AgentEntry {
@@ -45,10 +45,12 @@ function getMcpStatus(): Array<{
   return servers.map((s) => ({
     name: s.name,
     url: s.url,
-    running:
-      runningNames.length > 0
+    // In-process servers have no container — they're up if configured
+    running: isInProcessMcpServer(s.name)
+      ? true
+      : runningNames.length > 0
         ? runningNames.some((n) => n.includes(s.name))
-        : true, // if docker ps failed, assume running (containers started at boot)
+        : true, // if docker ps failed, assume running
   }));
 }
 

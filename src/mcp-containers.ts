@@ -29,6 +29,11 @@ let mcpRouterServer: import('http').Server | null = null;
 /** In-process MCP handlers (brave, caldav) — served directly without a proxy hop. */
 const inProcessHandlers = new Map<string, InProcessMcpHandler>();
 
+/** Returns true if the named MCP server runs in-process (no container to check). */
+export function isInProcessMcpServer(name: string): boolean {
+  return inProcessHandlers.has(name);
+}
+
 /** Private Docker network shared by all MCP containers and agent containers. */
 export const NANOCLAW_NETWORK = 'nanoclaw-net';
 
