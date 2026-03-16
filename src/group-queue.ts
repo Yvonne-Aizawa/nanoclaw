@@ -89,7 +89,11 @@ export class GroupQueue {
         taskId: s.runningTaskId,
       });
     }
-    return { agents, activeCount: this.activeCount, maxConcurrent: MAX_CONCURRENT_CONTAINERS };
+    return {
+      agents,
+      activeCount: this.activeCount,
+      maxConcurrent: MAX_CONCURRENT_CONTAINERS,
+    };
   }
 
   enqueueMessageCheck(groupJid: string): void {

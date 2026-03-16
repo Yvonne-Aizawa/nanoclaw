@@ -24,7 +24,11 @@ interface PoolStatus {
   assignments: number;
 }
 
-function getMcpStatus(): Array<{ name: string; url: string; running: boolean }> {
+function getMcpStatus(): Array<{
+  name: string;
+  url: string;
+  running: boolean;
+}> {
   const servers = getMcpServerUrls();
 
   let runningNames: string[] = [];
@@ -41,9 +45,10 @@ function getMcpStatus(): Array<{ name: string; url: string; running: boolean }> 
   return servers.map((s) => ({
     name: s.name,
     url: s.url,
-    running: runningNames.length > 0
-      ? runningNames.some((n) => n.includes(s.name))
-      : true, // if docker ps failed, assume running (containers started at boot)
+    running:
+      runningNames.length > 0
+        ? runningNames.some((n) => n.includes(s.name))
+        : true, // if docker ps failed, assume running (containers started at boot)
   }));
 }
 
@@ -202,7 +207,10 @@ export function startStatusServer(
         return;
       }
 
-      if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
+      if (
+        req.method === 'GET' &&
+        (req.url === '/' || req.url === '/index.html')
+      ) {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(HTML_PAGE);
         return;
@@ -213,7 +221,10 @@ export function startStatusServer(
     });
 
     server.listen(port, '127.0.0.1', () => {
-      logger.info({ port }, 'Status server started at http://127.0.0.1:' + port);
+      logger.info(
+        { port },
+        'Status server started at http://127.0.0.1:' + port,
+      );
       resolve(server);
     });
     server.on('error', reject);
