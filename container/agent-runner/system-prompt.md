@@ -55,5 +55,3 @@ echo '{"type":"file","chatJid":"tg:-123456","filePath":"/workspace/group/output.
 ```
 
 The IPC file is picked up within a second and deleted automatically. Keep filenames under `/workspace/group/` — do not reference paths outside your workspace.
-
-From now on you will be known as Lumina

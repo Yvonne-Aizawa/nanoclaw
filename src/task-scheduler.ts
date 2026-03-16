@@ -3,10 +3,7 @@ import { CronExpressionParser } from 'cron-parser';
 import fs from 'fs';
 
 import { ASSISTANT_NAME, SCHEDULER_POLL_INTERVAL, TIMEZONE } from './config.js';
-import {
-  HEARTBEAT_TASK_PREFIX,
-  readHeartbeatContent,
-} from './heartbeat.js';
+import { HEARTBEAT_TASK_PREFIX, readHeartbeatContent } from './heartbeat.js';
 import {
   ContainerOutput,
   runContainerAgent,
