@@ -34,6 +34,19 @@ export function isInProcessMcpServer(name: string): boolean {
   return inProcessHandlers.has(name);
 }
 
+/**
+ * Returns true if the named MCP server is backed by a Docker container.
+ * In-process servers (brave, caldav) and remote proxies are not container-backed.
+ */
+export function isContainerBackedMcpServer(name: string): boolean {
+  if (inProcessHandlers.has(name)) return false;
+  const { mcp } = loadAppConfig();
+  const srv = (mcp?.servers ?? []).find((s) => s.name === name);
+  if (srv) return srv.type !== 'remote';
+  // playwright is the only built-in container server
+  return name === 'playwright';
+}
+
 /** Private Docker network shared by all MCP containers and agent containers. */
 export const NANOCLAW_NETWORK = 'nanoclaw-net';
 
