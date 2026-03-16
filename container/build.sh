@@ -13,13 +13,6 @@ CONTAINER_RUNTIME="${CONTAINER_RUNTIME:-docker}"
 echo "Building MCP base image..."
 ${CONTAINER_RUNTIME} build --no-cache -t "nanoclaw-mcp-base:${TAG}" mcp-base/
 
-# Build specialized MCP server images (all extend base)
-echo "Building Brave Search MCP image..."
-${CONTAINER_RUNTIME} build --no-cache -t "nanoclaw-mcp-brave:${TAG}" mcp-brave/
-
-echo "Building CalDAV MCP image..."
-${CONTAINER_RUNTIME} build --no-cache -t "nanoclaw-mcp-caldav:${TAG}" mcp-caldav/
-
 # Generic bridges/proxy (can run any npx/uvx package or proxy a remote server)
 echo "Building generic npx bridge image..."
 ${CONTAINER_RUNTIME} build --no-cache -t "nanoclaw-mcp-npx:${TAG}" mcp-npx/
@@ -38,8 +31,7 @@ ${CONTAINER_RUNTIME} build --no-cache -t "${IMAGE_NAME}:${TAG}" .
 
 echo ""
 echo "Build complete!"
-echo "Images: nanoclaw-mcp-base, nanoclaw-mcp-brave, nanoclaw-mcp-caldav,"
-echo "        nanoclaw-mcp-npx, nanoclaw-mcp-uvx,"
+echo "Images: nanoclaw-mcp-base, nanoclaw-mcp-npx, nanoclaw-mcp-uvx,"
 echo "        nanoclaw-mcp-playwright, ${IMAGE_NAME}"
 echo ""
 echo "Test agent with:"

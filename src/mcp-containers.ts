@@ -20,9 +20,14 @@ import {
   PROXY_BIND_HOST,
 } from './container-runtime.js';
 import { logger } from './logger.js';
+import { createBraveHandler, InProcessMcpHandler } from './mcp-brave.js';
+import { createCalDavHandler } from './mcp-caldav.js';
 
 /** Single host-side MCP router server (routes /<name>/mcp to each backend). */
 let mcpRouterServer: import('http').Server | null = null;
+
+/** In-process MCP handlers (brave, caldav) — served directly without a proxy hop. */
+const inProcessHandlers = new Map<string, InProcessMcpHandler>();
 
 /** Private Docker network shared by all MCP containers and agent containers. */
 export const NANOCLAW_NETWORK = 'nanoclaw-net';
@@ -110,28 +115,6 @@ function buildContainerSpecs(): McpContainerSpec[] {
       readyTimeout: 30000,
       memory: browser.memory ?? '1g',
       mounts: [`${sharedDir}:/shared`],
-    });
-  }
-
-  if (brave.enabled && brave.token) {
-    specs.push({
-      name: 'nanoclaw-mcp-brave',
-      image: resolveImage('nanoclaw-mcp-brave'),
-      port: 7701,
-      env: { BRAVE_API_KEY: brave.token },
-    });
-  }
-
-  if (caldav.enabled && caldav.url) {
-    specs.push({
-      name: 'nanoclaw-mcp-caldav',
-      image: resolveImage('nanoclaw-mcp-caldav'),
-      port: 7702,
-      env: {
-        CALDAV_URL: caldav.url,
-        CALDAV_USERNAME: caldav.username || '',
-        CALDAV_PASSWORD: caldav.password || '',
-      },
     });
   }
 
@@ -333,19 +316,13 @@ async function proxyRequest(
 }
 
 function buildRouteMap(): Map<string, McpRoute> {
-  const { brave, caldav, browser, mcp } = loadAppConfig();
+  const { browser, mcp } = loadAppConfig();
   const routes = new Map<string, McpRoute>();
 
   if (browser?.enabled) {
     routes.set('playwright', {
       url: `http://127.0.0.1:${browser.port ?? 7703}/mcp`,
     });
-  }
-  if (brave.enabled && brave.token) {
-    routes.set('brave', { url: 'http://127.0.0.1:7701/mcp' });
-  }
-  if (caldav.enabled && caldav.url) {
-    routes.set('caldav', { url: 'http://127.0.0.1:7702/mcp' });
   }
   for (const srv of mcp?.servers ?? []) {
     if (srv.type === 'remote') {
@@ -377,6 +354,19 @@ export function startMcpRouter(): void {
     }
 
     const name = match[1];
+
+    const inProcess = inProcessHandlers.get(name);
+    if (inProcess) {
+      inProcess.handleRequest(req, res).catch((err) => {
+        logger.error({ err, name }, 'In-process MCP handler error');
+        if (!res.headersSent) {
+          res.writeHead(500);
+          res.end('Internal MCP error');
+        }
+      });
+      return;
+    }
+
     const route = routes.get(name);
     if (!route) {
       res.writeHead(404);
@@ -407,7 +397,27 @@ export function stopMcpRouter(): void {
   logger.info('MCP router stopped');
 }
 
+function startInProcessMcpServers(): void {
+  const { brave, caldav } = loadAppConfig();
+  if (brave.enabled && brave.token) {
+    inProcessHandlers.set('brave', createBraveHandler(brave.token));
+    logger.info('Brave MCP server started in-process');
+  }
+  if (caldav.enabled && caldav.url) {
+    inProcessHandlers.set(
+      'caldav',
+      createCalDavHandler({
+        url: caldav.url,
+        username: caldav.username || '',
+        password: caldav.password || '',
+      }),
+    );
+    logger.info('CalDAV MCP server started in-process');
+  }
+}
+
 export async function startMcpContainers(): Promise<void> {
+  startInProcessMcpServers();
   ensureNetwork();
   startMcpRouter();
 
