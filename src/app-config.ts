@@ -86,6 +86,11 @@ export interface AppConfig {
   /** Additional MCP servers to sandbox in containers. */
   mcp?: {
     servers?: Array<{ name: string } & McpServerConfig>;
+    /**
+     * Single host port for the MCP router. All MCP servers are reachable at
+     * host.docker.internal:<routerPort>/<name>/mcp. Defaults to 7700.
+     */
+    routerPort?: number;
   };
   /**
    * Browser automation via @playwright/mcp in a dedicated container.

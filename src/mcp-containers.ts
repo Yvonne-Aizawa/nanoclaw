@@ -21,8 +21,8 @@ import {
 } from './container-runtime.js';
 import { logger } from './logger.js';
 
-/** Host-side proxy servers for remote MCP servers (type: 'remote'). */
-const remoteProxyServers = new Map<string, import('http').Server>();
+/** Single host-side MCP router server (routes /<name>/mcp to each backend). */
+let mcpRouterServer: import('http').Server | null = null;
 
 /** Private Docker network shared by all MCP containers and agent containers. */
 export const NANOCLAW_NETWORK = 'nanoclaw-net';
@@ -217,6 +217,9 @@ function startContainer(spec: McpContainerSpec): void {
     'unless-stopped',
     '--network',
     NANOCLAW_NETWORK,
+    // Publish to localhost so the host-side MCP router can reach the container
+    '-p',
+    `127.0.0.1:${spec.port}:${spec.port}`,
     ...hostGatewayArgs(),
     ...resourceArgs,
     ...envArgs,
@@ -235,7 +238,6 @@ async function waitReady(
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   // Probe the server from inside the container using Node's built-in fetch.
-  // No ports are published to the host, so we can't probe from outside.
   const nodeScript = [
     `fetch('http://localhost:${port}/mcp',{`,
     `method:'POST',`,
@@ -262,14 +264,19 @@ async function waitReady(
   );
 }
 
+interface McpRoute {
+  url: string;
+  headers?: Record<string, string>;
+}
+
 const PASSTHROUGH_HEADERS = ['content-type', 'accept', 'mcp-session-id'];
 
-async function handleRemoteProxy(
+async function proxyRequest(
   req: IncomingMessage,
   res: ServerResponse,
-  upstreamUrl: string,
-  injectedHeaders: Record<string, string>,
+  route: McpRoute,
 ): Promise<void> {
+  const injectedHeaders = route.headers ?? {};
   const injectedNames = new Set(
     Object.keys(injectedHeaders).map((h) => h.toLowerCase()),
   );
@@ -282,7 +289,6 @@ async function handleRemoteProxy(
     }
   }
 
-  // Collect body
   const chunks: Buffer[] = [];
   for await (const chunk of req) chunks.push(chunk as Buffer);
   const body = chunks.length > 0 ? Buffer.concat(chunks) : undefined;
@@ -290,9 +296,8 @@ async function handleRemoteProxy(
   try {
     const init: RequestInit = { method: req.method, headers };
     if (body && body.length > 0) init.body = body;
-    const upstream = await fetch(upstreamUrl, init);
+    const upstream = await fetch(route.url, init);
 
-    // Forward relevant response headers
     for (const h of ['content-type', 'mcp-session-id']) {
       const val = upstream.headers.get(h);
       if (val) res.setHeader(h, val);
@@ -327,45 +332,84 @@ async function handleRemoteProxy(
   }
 }
 
-export function startRemoteMcpProxies(): void {
-  const { mcp } = loadAppConfig();
-  for (const srv of mcp?.servers ?? []) {
-    if (srv.type !== 'remote') continue;
+function buildRouteMap(): Map<string, McpRoute> {
+  const { brave, caldav, browser, mcp } = loadAppConfig();
+  const routes = new Map<string, McpRoute>();
 
-    const injectedHeaders: Record<string, string> = { ...(srv.headers ?? {}) };
-
-    const server = createServer((req, res) => {
-      handleRemoteProxy(req, res, srv.url, injectedHeaders).catch((err) => {
-        logger.error({ err, name: srv.name }, 'Remote MCP proxy error');
-        if (!res.headersSent) {
-          res.writeHead(500);
-          res.end('Internal proxy error');
-        }
-      });
+  if (browser?.enabled) {
+    routes.set('playwright', {
+      url: `http://127.0.0.1:${browser.port ?? 7703}/mcp`,
     });
-
-    server.listen(srv.port, PROXY_BIND_HOST, () => {
-      logger.info(
-        { name: srv.name, port: srv.port, url: srv.url },
-        'Remote MCP proxy started on host',
-      );
-    });
-
-    remoteProxyServers.set(srv.name, server);
   }
+  if (brave.enabled && brave.token) {
+    routes.set('brave', { url: 'http://127.0.0.1:7701/mcp' });
+  }
+  if (caldav.enabled && caldav.url) {
+    routes.set('caldav', { url: 'http://127.0.0.1:7702/mcp' });
+  }
+  for (const srv of mcp?.servers ?? []) {
+    if (srv.type === 'remote') {
+      routes.set(srv.name, { url: srv.url, headers: srv.headers });
+    } else {
+      routes.set(srv.name, { url: `http://127.0.0.1:${srv.port}/mcp` });
+    }
+  }
+
+  return routes;
 }
 
-export function stopRemoteMcpProxies(): void {
-  for (const [name, server] of remoteProxyServers) {
-    server.close();
-    logger.info({ name }, 'Remote MCP proxy stopped');
-  }
-  remoteProxyServers.clear();
+export function startMcpRouter(): void {
+  const { mcp } = loadAppConfig();
+  const routerPort = mcp?.routerPort ?? 7700;
+  const routes = buildRouteMap();
+
+  if (routes.size === 0) return;
+
+  // URL pattern: /<name>/mcp
+  const PATH_RE = /^\/([^/]+)\/mcp$/;
+
+  mcpRouterServer = createServer((req, res) => {
+    const match = (req.url ?? '').match(PATH_RE);
+    if (!match) {
+      res.writeHead(404);
+      res.end('Not Found');
+      return;
+    }
+
+    const name = match[1];
+    const route = routes.get(name);
+    if (!route) {
+      res.writeHead(404);
+      res.end(`MCP server '${name}' not configured`);
+      return;
+    }
+
+    proxyRequest(req, res, route).catch((err) => {
+      logger.error({ err, name }, 'MCP router proxy error');
+      if (!res.headersSent) {
+        res.writeHead(500);
+        res.end('Internal proxy error');
+      }
+    });
+  });
+
+  mcpRouterServer.listen(routerPort, PROXY_BIND_HOST, () => {
+    logger.info(
+      { port: routerPort, servers: [...routes.keys()] },
+      'MCP router started',
+    );
+  });
+}
+
+export function stopMcpRouter(): void {
+  mcpRouterServer?.close();
+  mcpRouterServer = null;
+  logger.info('MCP router stopped');
 }
 
 export async function startMcpContainers(): Promise<void> {
   ensureNetwork();
-  startRemoteMcpProxies();
+  startMcpRouter();
 
   const specs = buildContainerSpecs();
   if (specs.length === 0) return;
@@ -396,7 +440,7 @@ export async function startMcpContainers(): Promise<void> {
 }
 
 export function stopMcpContainers(): void {
-  stopRemoteMcpProxies();
+  stopMcpRouter();
   const specs = buildContainerSpecs();
   for (const spec of specs) {
     stopAndRemove(spec.name);
@@ -421,37 +465,29 @@ export function getMcpServerUrls(): Array<{
   mounts?: McpMount[];
 }> {
   const { brave, caldav, browser, mcp } = loadAppConfig();
+  const routerPort = mcp?.routerPort ?? 7700;
+  const base = `http://${CONTAINER_HOST_GATEWAY}:${routerPort}`;
   const servers: Array<{ name: string; url: string; mounts?: McpMount[] }> = [];
 
-  // Containers are reachable by name within the shared Docker network.
-  // No host ports are published — traffic stays inside nanoclaw-net.
+  // All servers are routed through the host MCP router at /<name>/mcp
   if (browser?.enabled) {
-    const port = browser.port ?? 7703;
     servers.push({
       name: 'playwright',
-      url: `http://nanoclaw-mcp-playwright:${port}/mcp`,
+      url: `${base}/playwright/mcp`,
       mounts: [{ containerPath: '/shared', readonly: false }],
     });
   }
   if (brave.enabled && brave.token) {
-    servers.push({ name: 'brave', url: `http://nanoclaw-mcp-brave:7701/mcp` });
+    servers.push({ name: 'brave', url: `${base}/brave/mcp` });
   }
   if (caldav.enabled && caldav.url) {
-    servers.push({
-      name: 'caldav',
-      url: `http://nanoclaw-mcp-caldav:7702/mcp`,
-    });
+    servers.push({ name: 'caldav', url: `${base}/caldav/mcp` });
   }
   for (const srv of mcp?.servers ?? []) {
     const mounts = parseMounts(srv.mounts);
-    // Remote servers run on the host; reach via host gateway. Others use Docker network DNS.
-    const url =
-      srv.type === 'remote'
-        ? `http://${CONTAINER_HOST_GATEWAY}:${srv.port}/mcp`
-        : `http://nanoclaw-mcp-${srv.name}:${srv.port}/mcp`;
     servers.push({
       name: srv.name,
-      url,
+      url: `${base}/${srv.name}/mcp`,
       ...(mounts.length > 0 ? { mounts } : {}),
     });
   }
