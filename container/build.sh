@@ -27,9 +27,6 @@ ${CONTAINER_RUNTIME} build --no-cache -t "nanoclaw-mcp-npx:${TAG}" mcp-npx/
 echo "Building generic uvx bridge image..."
 ${CONTAINER_RUNTIME} build --no-cache -t "nanoclaw-mcp-uvx:${TAG}" mcp-uvx/
 
-echo "Building remote MCP proxy image..."
-${CONTAINER_RUNTIME} build --no-cache -t "nanoclaw-mcp-remote:${TAG}" mcp-remote/
-
 # Playwright MCP image (extends mcp-npx, adds Chromium)
 echo "Building Playwright MCP image..."
 ${CONTAINER_RUNTIME} build --no-cache -t "nanoclaw-mcp-playwright:${TAG}" mcp-playwright/
@@ -42,7 +39,7 @@ ${CONTAINER_RUNTIME} build --no-cache -t "${IMAGE_NAME}:${TAG}" .
 echo ""
 echo "Build complete!"
 echo "Images: nanoclaw-mcp-base, nanoclaw-mcp-brave, nanoclaw-mcp-caldav,"
-echo "        nanoclaw-mcp-npx, nanoclaw-mcp-uvx, nanoclaw-mcp-remote,"
+echo "        nanoclaw-mcp-npx, nanoclaw-mcp-uvx,"
 echo "        nanoclaw-mcp-playwright, ${IMAGE_NAME}"
 echo ""
 echo "Test agent with:"
