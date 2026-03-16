@@ -33,14 +33,28 @@ export function readHeartbeatContent(folder: string): string | null {
 }
 
 /**
+ * Returns the next UTC clock-aligned boundary for the given interval.
+ * e.g. 30-min interval at 19:14 → 19:30, at 19:31 → 20:00.
+ * This keeps runs at :00/:30 (or whatever the grid is) regardless of when
+ * NanoClaw was started or the heartbeat.md was created.
+ */
+function nextAlignedRun(intervalMs: number): Date {
+  const now = Date.now();
+  const midnight = new Date();
+  midnight.setUTCHours(0, 0, 0, 0);
+  const msSinceMidnight = now - midnight.getTime();
+  const periods = Math.floor(msSinceMidnight / intervalMs);
+  return new Date(midnight.getTime() + (periods + 1) * intervalMs);
+}
+
+/**
  * Ensure heartbeat tasks exist for groups that have a heartbeat.md and
  * remove tasks for groups whose file has been deleted.
  */
 export function syncHeartbeatTasks(
   groups: Record<string, RegisteredGroup>,
 ): void {
-  const intervalMs =
-    loadAppConfig().heartbeat?.intervalMs ?? 30 * 60 * 1000;
+  const intervalMs = loadAppConfig().heartbeat?.intervalMs ?? 30 * 60 * 1000;
 
   for (const [jid, group] of Object.entries(groups)) {
     const taskId = `${HEARTBEAT_TASK_PREFIX}${group.folder}`;
@@ -57,7 +71,7 @@ export function syncHeartbeatTasks(
         schedule_type: 'interval',
         schedule_value: String(intervalMs),
         context_mode: 'group',
-        next_run: new Date(Date.now() + intervalMs).toISOString(),
+        next_run: nextAlignedRun(intervalMs).toISOString(),
         status: 'active',
         created_at: new Date().toISOString(),
       });
