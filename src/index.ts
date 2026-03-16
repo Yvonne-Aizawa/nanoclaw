@@ -12,6 +12,8 @@ import {
   TRIGGER_PATTERN,
 } from './config.js';
 import { startCredentialProxy } from './credential-proxy.js';
+import { startStatusServer } from './status-server.js';
+import { getPoolStatus } from './channels/telegram.js';
 import './channels/index.js';
 import {
   getChannelFactory,
@@ -596,12 +598,24 @@ async function main(): Promise<void> {
     PROXY_BIND_HOST,
   );
 
+  // Start status web UI if enabled
+  const webCfg = loadAppConfig().web;
+  let statusServer: import('http').Server | null = null;
+  if (webCfg?.enabled) {
+    statusServer = await startStatusServer(
+      webCfg.port ?? 3000,
+      () => queue.getStatus(),
+      getPoolStatus,
+    );
+  }
+
   // Graceful shutdown handlers
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutdown signal received');
     // Force exit after 8s if graceful shutdown hangs (e.g. Telegram polling)
     setTimeout(() => process.exit(0), 8000).unref();
     stopMcpContainers();
+    statusServer?.close();
     proxyServer.close();
     await queue.shutdown(10000);
     for (const ch of channels) await ch.disconnect();

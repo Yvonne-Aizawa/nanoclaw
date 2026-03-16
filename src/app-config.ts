@@ -122,6 +122,15 @@ export interface AppConfig {
     enabled: boolean;
   };
   /**
+   * Status web UI. Disabled by default.
+   * Set enabled: true and optionally port (default 3000) in config.json.
+   */
+  web?: {
+    enabled: boolean;
+    /** HTTP port for the status UI. Defaults to 3000. */
+    port?: number;
+  };
+  /**
    * Agent run limits. Controls how long a container agent is allowed to run.
    */
   agent?: {

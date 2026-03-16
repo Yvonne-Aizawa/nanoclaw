@@ -70,6 +70,10 @@ export async function initBotPool(tokens: string[]): Promise<void> {
   }
 }
 
+export function getPoolStatus(): { size: number; assignments: number } {
+  return { size: poolApis.length, assignments: senderBotMap.size };
+}
+
 /**
  * Send a message via a pool bot assigned to the given sender name.
  * Assigns bots round-robin on first use; subsequent messages from the

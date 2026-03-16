@@ -59,6 +59,39 @@ export class GroupQueue {
     this.processMessagesFn = fn;
   }
 
+  getStatus(): {
+    agents: Array<{
+      groupJid: string;
+      groupFolder: string | null;
+      containerName: string | null;
+      state: 'active' | 'idle' | 'waiting';
+      isTask: boolean;
+      taskId: string | null;
+    }>;
+    activeCount: number;
+    maxConcurrent: number;
+  } {
+    const agents = [];
+    for (const [groupJid, s] of this.groups) {
+      if (!s.active && !s.pendingMessages) continue;
+      const state: 'active' | 'idle' | 'waiting' =
+        s.active && !s.idleWaiting
+          ? 'active'
+          : s.active && s.idleWaiting
+            ? 'idle'
+            : 'waiting';
+      agents.push({
+        groupJid,
+        groupFolder: s.groupFolder,
+        containerName: s.containerName,
+        state,
+        isTask: s.isTaskContainer,
+        taskId: s.runningTaskId,
+      });
+    }
+    return { agents, activeCount: this.activeCount, maxConcurrent: MAX_CONCURRENT_CONTAINERS };
+  }
+
   enqueueMessageCheck(groupJid: string): void {
     if (this.shuttingDown) return;
 
