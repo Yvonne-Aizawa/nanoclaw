@@ -49,7 +49,7 @@ export async function run(_args: string[]): Promise<void> {
     process.exit(1);
   }
 
-  fs.mkdirSync(path.join(projectRoot, 'logs'), { recursive: true });
+  fs.mkdirSync(path.join(projectRoot, 'workspace', 'logs'), { recursive: true });
 
   if (platform === 'macos') {
     setupLaunchd(projectRoot, nodePath, homeDir);
@@ -106,9 +106,9 @@ function setupLaunchd(
         <string>${homeDir}</string>
     </dict>
     <key>StandardOutPath</key>
-    <string>${projectRoot}/logs/nanoclaw.log</string>
+    <string>${projectRoot}/workspace/logs/nanoclaw.log</string>
     <key>StandardErrorPath</key>
-    <string>${projectRoot}/logs/nanoclaw.error.log</string>
+    <string>${projectRoot}/workspace/logs/nanoclaw.error.log</string>
 </dict>
 </plist>`;
 
@@ -246,8 +246,8 @@ RestartSec=5
 TimeoutStopSec=10
 Environment=HOME=${homeDir}
 Environment=PATH=/usr/local/bin:/usr/bin:/bin:${homeDir}/.local/bin
-StandardOutput=append:${projectRoot}/logs/nanoclaw.log
-StandardError=append:${projectRoot}/logs/nanoclaw.error.log
+StandardOutput=append:${projectRoot}/workspace/logs/nanoclaw.log
+StandardError=append:${projectRoot}/workspace/logs/nanoclaw.error.log
 
 [Install]
 WantedBy=${runningAsRoot ? 'multi-user.target' : 'default.target'}`;
@@ -337,12 +337,12 @@ function setupNohupFallback(
     '',
     'echo "Starting NanoClaw..."',
     `nohup ${JSON.stringify(nodePath)} ${JSON.stringify(projectRoot + '/dist/index.js')} \\`,
-    `  >> ${JSON.stringify(projectRoot + '/logs/nanoclaw.log')} \\`,
-    `  2>> ${JSON.stringify(projectRoot + '/logs/nanoclaw.error.log')} &`,
+    `  >> ${JSON.stringify(projectRoot + '/workspace/logs/nanoclaw.log')} \\`,
+    `  2>> ${JSON.stringify(projectRoot + '/workspace/logs/nanoclaw.error.log')} &`,
     '',
     `echo $! > ${JSON.stringify(pidFile)}`,
     'echo "NanoClaw started (PID $!)"',
-    `echo "Logs: tail -f ${projectRoot}/logs/nanoclaw.log"`,
+    `echo "Logs: tail -f ${projectRoot}/workspace/logs/nanoclaw.log"`,
   ];
   const wrapper = lines.join('\n') + '\n';
 
