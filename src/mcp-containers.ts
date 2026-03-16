@@ -7,13 +7,22 @@
 
 import { execFileSync, execSync } from 'child_process';
 import fs from 'fs';
+import { createServer, IncomingMessage, ServerResponse } from 'http';
 import os from 'os';
 import path from 'path';
 
 import { loadAppConfig } from './app-config.js';
 import { DATA_DIR } from './config.js';
-import { CONTAINER_RUNTIME_BIN, hostGatewayArgs } from './container-runtime.js';
+import {
+  CONTAINER_HOST_GATEWAY,
+  CONTAINER_RUNTIME_BIN,
+  hostGatewayArgs,
+  PROXY_BIND_HOST,
+} from './container-runtime.js';
 import { logger } from './logger.js';
+
+/** Host-side proxy servers for remote MCP servers (type: 'remote'). */
+const remoteProxyServers = new Map<string, import('http').Server>();
 
 /** Private Docker network shared by all MCP containers and agent containers. */
 export const NANOCLAW_NETWORK = 'nanoclaw-net';
@@ -148,26 +157,8 @@ function buildContainerSpecs(): McpContainerSpec[] {
         cpus: srv.cpus,
         memory: srv.memory,
       });
-    } else if (srv.type === 'remote') {
-      const env: Record<string, string> = {
-        MCP_REMOTE_URL: srv.url,
-        MCP_PORT: String(srv.port),
-      };
-      // Inject headers as MCP_HEADER_<Name> env vars
-      for (const [header, value] of Object.entries(srv.headers ?? {})) {
-        const envKey = `MCP_HEADER_${header.replace(/-/g, '_')}`;
-        env[envKey] = value;
-      }
-      specs.push({
-        name: containerName,
-        image: resolveImage('nanoclaw-mcp-remote'),
-        port: srv.port,
-        env,
-        mounts: srv.mounts,
-        cpus: srv.cpus,
-        memory: srv.memory,
-      });
     }
+    // type: 'remote' — handled by startRemoteMcpProxies() on the host, not a container
   }
 
   return specs;
@@ -271,8 +262,110 @@ async function waitReady(
   );
 }
 
+const PASSTHROUGH_HEADERS = ['content-type', 'accept', 'mcp-session-id'];
+
+async function handleRemoteProxy(
+  req: IncomingMessage,
+  res: ServerResponse,
+  upstreamUrl: string,
+  injectedHeaders: Record<string, string>,
+): Promise<void> {
+  const injectedNames = new Set(
+    Object.keys(injectedHeaders).map((h) => h.toLowerCase()),
+  );
+
+  const headers: Record<string, string> = { ...injectedHeaders };
+  for (const h of PASSTHROUGH_HEADERS) {
+    const val = req.headers[h];
+    if (val && !injectedNames.has(h)) {
+      headers[h] = Array.isArray(val) ? val.join(', ') : val;
+    }
+  }
+
+  // Collect body
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) chunks.push(chunk as Buffer);
+  const body = chunks.length > 0 ? Buffer.concat(chunks) : undefined;
+
+  try {
+    const init: RequestInit = { method: req.method, headers };
+    if (body && body.length > 0) init.body = body;
+    const upstream = await fetch(upstreamUrl, init);
+
+    // Forward relevant response headers
+    for (const h of ['content-type', 'mcp-session-id']) {
+      const val = upstream.headers.get(h);
+      if (val) res.setHeader(h, val);
+    }
+
+    const contentType = upstream.headers.get('content-type') ?? '';
+    if (contentType.includes('text/event-stream')) {
+      res.setHeader('Cache-Control', 'no-cache');
+      const reader = upstream.body?.getReader();
+      if (reader) {
+        const dec = new TextDecoder();
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(dec.decode(value, { stream: true }));
+        }
+      }
+      res.end();
+    } else {
+      res.writeHead(upstream.status);
+      res.end(await upstream.text());
+    }
+  } catch (err) {
+    res.writeHead(502, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        error: { code: -32603, message: `Proxy error: ${String(err)}` },
+        id: null,
+      }),
+    );
+  }
+}
+
+export function startRemoteMcpProxies(): void {
+  const { mcp } = loadAppConfig();
+  for (const srv of mcp?.servers ?? []) {
+    if (srv.type !== 'remote') continue;
+
+    const injectedHeaders: Record<string, string> = { ...(srv.headers ?? {}) };
+
+    const server = createServer((req, res) => {
+      handleRemoteProxy(req, res, srv.url, injectedHeaders).catch((err) => {
+        logger.error({ err, name: srv.name }, 'Remote MCP proxy error');
+        if (!res.headersSent) {
+          res.writeHead(500);
+          res.end('Internal proxy error');
+        }
+      });
+    });
+
+    server.listen(srv.port, PROXY_BIND_HOST, () => {
+      logger.info(
+        { name: srv.name, port: srv.port, url: srv.url },
+        'Remote MCP proxy started on host',
+      );
+    });
+
+    remoteProxyServers.set(srv.name, server);
+  }
+}
+
+export function stopRemoteMcpProxies(): void {
+  for (const [name, server] of remoteProxyServers) {
+    server.close();
+    logger.info({ name }, 'Remote MCP proxy stopped');
+  }
+  remoteProxyServers.clear();
+}
+
 export async function startMcpContainers(): Promise<void> {
   ensureNetwork();
+  startRemoteMcpProxies();
 
   const specs = buildContainerSpecs();
   if (specs.length === 0) return;
@@ -303,6 +396,7 @@ export async function startMcpContainers(): Promise<void> {
 }
 
 export function stopMcpContainers(): void {
+  stopRemoteMcpProxies();
   const specs = buildContainerSpecs();
   for (const spec of specs) {
     stopAndRemove(spec.name);
@@ -350,9 +444,14 @@ export function getMcpServerUrls(): Array<{
   }
   for (const srv of mcp?.servers ?? []) {
     const mounts = parseMounts(srv.mounts);
+    // Remote servers run on the host; reach via host gateway. Others use Docker network DNS.
+    const url =
+      srv.type === 'remote'
+        ? `http://${CONTAINER_HOST_GATEWAY}:${srv.port}/mcp`
+        : `http://nanoclaw-mcp-${srv.name}:${srv.port}/mcp`;
     servers.push({
       name: srv.name,
-      url: `http://nanoclaw-mcp-${srv.name}:${srv.port}/mcp`,
+      url,
       ...(mounts.length > 0 ? { mounts } : {}),
     });
   }
