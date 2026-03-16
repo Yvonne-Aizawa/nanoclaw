@@ -113,6 +113,14 @@ export interface AppConfig {
   containers?: {
     registry?: string;
   };
+  /**
+   * Remote control via /remote-control command from the main chat.
+   * Starts a host-level Claude Code session accessible via browser URL.
+   * Disabled by default.
+   */
+  remoteControl?: {
+    enabled: boolean;
+  };
 }
 
 let _config: AppConfig | null = null;
