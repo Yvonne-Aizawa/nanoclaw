@@ -81,15 +81,13 @@ function parseVEvents(
   rangeEnd?: Date,
 ): CalEvent[] {
   const events: CalEvent[] = [];
-  const eventBlocks =
-    icalStr.match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/g) || [];
+  const eventBlocks = icalStr.match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/g) || [];
   for (const block of eventBlocks) {
     const unfolded = block.replace(/\r?\n[ \t]/g, '');
 
     const dtStartMatch = unfolded.match(/DTSTART((?:;[^:]*)?):([^\r\n]*)/m);
     const rawStart = dtStartMatch?.[2] || '';
-    const rawEnd =
-      unfolded.match(/DTEND(?:;[^:]*)?:([^\r\n]*)/m)?.[1] || '';
+    const rawEnd = unfolded.match(/DTEND(?:;[^:]*)?:([^\r\n]*)/m)?.[1] || '';
     const rruleStr = parseIcalField(unfolded, 'RRULE');
     const uid = parseIcalField(unfolded, 'UID');
     const summary = parseIcalField(unfolded, 'SUMMARY');
@@ -113,7 +111,8 @@ function parseVEvents(
           `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
 
         for (const occ of occurrences) {
-          const occEnd = duration > 0 ? new Date(occ.getTime() + duration) : occ;
+          const occEnd =
+            duration > 0 ? new Date(occ.getTime() + duration) : occ;
           events.push({
             uid,
             summary,
@@ -332,10 +331,7 @@ export function createCalDavHandler(config: CalDavConfig): InProcessMcpHandler {
         summary: z.string().describe('Event title'),
         start: z.string().describe('Start date/time in ISO format'),
         end: z.string().describe('End date/time in ISO format'),
-        description: z
-          .string()
-          .optional()
-          .describe('Event description/notes'),
+        description: z.string().optional().describe('Event description/notes'),
         location: z.string().optional().describe('Event location'),
       },
       async (args) => {

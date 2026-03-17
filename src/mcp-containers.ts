@@ -22,6 +22,7 @@ import {
 import { logger } from './logger.js';
 import { createBraveHandler, InProcessMcpHandler } from './mcp-brave.js';
 import { createCalDavHandler } from './mcp-caldav.js';
+import { createUtilsHandler } from './mcp-utils.js';
 
 /** Single host-side MCP router server (routes /<name>/mcp to each backend). */
 let mcpRouterServer: import('http').Server | null = null;
@@ -432,6 +433,8 @@ function startInProcessMcpServers(): void {
     );
     logger.info('CalDAV MCP server started in-process');
   }
+  inProcessHandlers.set('utils', createUtilsHandler());
+  logger.info('Utils MCP server started in-process');
 }
 
 export async function startMcpContainers(): Promise<void> {
@@ -486,8 +489,12 @@ export interface McpMount {
  * Returns the list of active MCP server URLs to pass to agent containers.
  * Each entry is { name, url, mounts? } where url points to host.docker.internal:<port>.
  * mounts describes paths accessible inside the MCP container (no host paths exposed).
+ *
+ * If groupFolder is provided, servers that have a `groups` restriction are only
+ * included when the group is listed. Servers without a `groups` field are always
+ * included (default: accessible by all agents).
  */
-export function getMcpServerUrls(): Array<{
+export function getMcpServerUrls(groupFolder?: string): Array<{
   name: string;
   url: string;
   mounts?: McpMount[];
@@ -497,7 +504,13 @@ export function getMcpServerUrls(): Array<{
   const base = `http://${CONTAINER_HOST_GATEWAY}:${routerPort}`;
   const servers: Array<{ name: string; url: string; mounts?: McpMount[] }> = [];
 
+  function allowed(groups?: string[]): boolean {
+    if (!groups || groups.length === 0) return true;
+    return groupFolder !== undefined && groups.includes(groupFolder);
+  }
+
   // All servers are routed through the host MCP router at /<name>/mcp
+  servers.push({ name: 'utils', url: `${base}/utils/mcp` });
   if (browser?.enabled) {
     servers.push({
       name: 'playwright',
@@ -505,13 +518,14 @@ export function getMcpServerUrls(): Array<{
       mounts: [{ containerPath: '/shared', readonly: false }],
     });
   }
-  if (brave.enabled && brave.token) {
+  if (brave.enabled && brave.token && allowed(brave.groups)) {
     servers.push({ name: 'brave', url: `${base}/brave/mcp` });
   }
-  if (caldav.enabled && caldav.url) {
+  if (caldav.enabled && caldav.url && allowed(caldav.groups)) {
     servers.push({ name: 'caldav', url: `${base}/caldav/mcp` });
   }
   for (const srv of mcp?.servers ?? []) {
+    if (!allowed(srv.groups)) continue;
     const mounts = parseMounts(srv.mounts);
     servers.push({
       name: srv.name,

@@ -33,6 +33,11 @@ export interface McpStdioServerConfig {
   cpus?: number;
   /** Memory limit. Example: "256m", "1g". Defaults to "512m". */
   memory?: string;
+  /**
+   * Restrict this server to specific agent groups (folder names).
+   * If omitted, all groups can access the server.
+   */
+  groups?: string[];
 }
 
 /** A remote MCP server proxied through a container that injects auth headers. */
@@ -58,6 +63,11 @@ export interface McpRemoteServerConfig {
   cpus?: number;
   /** Memory limit. Example: "256m", "1g". Defaults to "512m". */
   memory?: string;
+  /**
+   * Restrict this server to specific agent groups (folder names).
+   * If omitted, all groups can access the server.
+   */
+  groups?: string[];
 }
 
 export type McpServerConfig = McpStdioServerConfig | McpRemoteServerConfig;
@@ -76,12 +86,16 @@ export interface AppConfig {
   brave: {
     enabled: boolean;
     token: string;
+    /** Restrict brave search to these groups. Omit to allow all groups. */
+    groups?: string[];
   };
   caldav: {
     enabled: boolean;
     url: string;
     username: string;
     password: string;
+    /** Restrict CalDAV to these groups. Omit to allow all groups. */
+    groups?: string[];
   };
   /** Additional MCP servers to sandbox in containers. */
   mcp?: {

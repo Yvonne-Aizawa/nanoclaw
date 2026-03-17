@@ -35,7 +35,12 @@
       "additionalProperties": false,
       "properties": {
         "enabled": { "type": "boolean" },
-        "token": { "type": "string" }
+        "token": { "type": "string" },
+        "groups": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Restrict brave search to these groups. Omit to allow all groups."
+        }
       }
     },
     "caldav": {
@@ -45,7 +50,12 @@
         "enabled": { "type": "boolean" },
         "url": { "type": "string" },
         "username": { "type": "string" },
-        "password": { "type": "string" }
+        "password": { "type": "string" },
+        "groups": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Restrict CalDAV to these groups. Omit to allow all groups."
+        }
       }
     },
     "mcp": {
@@ -136,6 +146,11 @@
             "description": "hostPath:containerPath or hostPath:containerPath:ro"
           },
           "description": "Host paths to mount into the MCP container"
+        },
+        "groups": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Restrict this server to specific agent groups (folder names). Omit to allow all groups."
         }
       }
     },
@@ -157,7 +172,8 @@
         },
         "mounts": true,
         "cpus": true,
-        "memory": true
+        "memory": true,
+        "groups": true
       }
     },
     "mcpUvxServer": {
@@ -178,7 +194,8 @@
         },
         "mounts": true,
         "cpus": true,
-        "memory": true
+        "memory": true,
+        "groups": true
       }
     },
     "mcpRemoteServer": {
@@ -198,7 +215,8 @@
         },
         "mounts": true,
         "cpus": true,
-        "memory": true
+        "memory": true,
+        "groups": true
       }
     }
   }

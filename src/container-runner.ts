@@ -235,6 +235,7 @@ function buildVolumeMounts(
 function buildContainerArgs(
   mounts: VolumeMount[],
   containerName: string,
+  groupFolder: string,
 ): string[] {
   const args: string[] = ['run', '-i', '--rm', '--name', containerName];
 
@@ -249,8 +250,9 @@ function buildContainerArgs(
 
   // Pass all active MCP server URLs as a JSON array.
   // Secrets stay inside the MCP containers — the agent only gets local URLs.
+  // Only servers allowed for this group (by the `groups` restriction field) are included.
   void loadAppConfig(); // ensure config is loaded (side-effect: caches it)
-  const mcpServers = getMcpServerUrls();
+  const mcpServers = getMcpServerUrls(groupFolder);
   if (mcpServers.length > 0) {
     args.push('-e', `MCP_SERVERS=${JSON.stringify(mcpServers)}`);
   }
@@ -309,7 +311,7 @@ export async function runContainerAgent(
   const mounts = buildVolumeMounts(group, input.isMain);
   const safeName = group.folder.replace(/[^a-zA-Z0-9-]/g, '-');
   const containerName = `nanoclaw-${safeName}-${Date.now()}`;
-  const containerArgs = buildContainerArgs(mounts, containerName);
+  const containerArgs = buildContainerArgs(mounts, containerName, input.groupFolder);
 
   logger.debug(
     {
