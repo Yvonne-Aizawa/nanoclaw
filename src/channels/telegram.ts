@@ -7,6 +7,7 @@ import { loadAppConfig } from '../app-config.js';
 import { ASSISTANT_NAME, GROUPS_DIR, TRIGGER_PATTERN } from '../config.js';
 import { upsertReaction } from '../db.js';
 import { logger } from '../logger.js';
+import { transcribeAudio } from '../transcribe.js';
 import { registerChannel, ChannelOpts } from './registry.js';
 import {
   Channel,
@@ -351,7 +352,59 @@ export class TelegramChannel implements Channel {
       );
     });
     this.bot.on('message:video', (ctx) => storeNonText(ctx, '[Video]'));
-    this.bot.on('message:voice', (ctx) => storeNonText(ctx, '[Voice message]'));
+    this.bot.on('message:voice', async (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = this.opts.registeredGroups()[chatJid];
+      if (!group) return;
+
+      const voice = ctx.message.voice;
+      const timestamp = new Date(ctx.message.date * 1000).toISOString();
+      const senderName =
+        ctx.from?.first_name ||
+        ctx.from?.username ||
+        ctx.from?.id?.toString() ||
+        'Unknown';
+      const isGroup =
+        ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
+
+      this.opts.onChatMetadata(chatJid, timestamp, undefined, 'telegram', isGroup);
+
+      let content = '[Voice message]';
+      if (voice?.file_id) {
+        try {
+          const file = await ctx.api.getFile(voice.file_id);
+          if (file.file_path) {
+            const fileUrl = `https://api.telegram.org/file/bot${this.botToken}/${file.file_path}`;
+            const response = await fetch(fileUrl);
+            if (response.ok) {
+              const attachmentsDir = path.join(GROUPS_DIR, group.folder, 'attachments');
+              fs.mkdirSync(attachmentsDir, { recursive: true });
+              const oggPath = path.join(attachmentsDir, `voice_${ctx.message.message_id}.ogg`);
+              fs.writeFileSync(oggPath, Buffer.from(await response.arrayBuffer()));
+
+              const transcript = await transcribeAudio(oggPath);
+              if (transcript) {
+                content = `[Voice: ${transcript}]`;
+              }
+              // Clean up temp file
+              fs.unlink(oggPath, () => {});
+            }
+          }
+        } catch (err) {
+          logger.warn({ err }, 'Failed to transcribe Telegram voice message');
+        }
+      }
+
+      this.opts.onMessage(chatJid, {
+        id: ctx.message.message_id.toString(),
+        chat_jid: chatJid,
+        sender: ctx.from?.id?.toString() || '',
+        sender_name: senderName,
+        content,
+        timestamp,
+        is_from_me: false,
+      });
+    });
     this.bot.on('message:audio', (ctx) => storeNonText(ctx, '[Audio]'));
     this.bot.on('message:document', async (ctx) => {
       const chatJid = `tg:${ctx.chat.id}`;
@@ -443,9 +496,7 @@ export class TelegramChannel implements Channel {
         ctx.messageReaction.user?.id?.toString() ||
         ctx.messageReaction.actor_chat?.id?.toString() ||
         'unknown';
-      const timestamp = new Date(
-        ctx.messageReaction.date * 1000,
-      ).toISOString();
+      const timestamp = new Date(ctx.messageReaction.date * 1000).toISOString();
 
       // new_reaction is the current emoji(s); empty array means removed
       const newReactions = ctx.messageReaction.new_reaction ?? [];
@@ -580,7 +631,10 @@ export class TelegramChannel implements Channel {
       );
       logger.info({ jid, messageId, emoji }, 'Telegram reaction sent');
     } catch (err) {
-      logger.error({ jid, messageId, emoji, err }, 'Failed to send Telegram reaction');
+      logger.error(
+        { jid, messageId, emoji, err },
+        'Failed to send Telegram reaction',
+      );
     }
   }
 
