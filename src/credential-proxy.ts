@@ -69,10 +69,22 @@ export function startCredentialProxy(
       const chunks: Buffer[] = [];
       req.on('data', (c) => chunks.push(c));
       req.on('end', () => {
-        // Rewrite model in request body if model is configured and this is a messages request
+        // Strip run-type path prefix and select the appropriate model override.
+        // Container runner sets ANTHROPIC_BASE_URL to .../chat or .../cron so
+        // the proxy can route each run to a different model without extra infra.
+        let reqUrl = req.url ?? '/';
+        let overrideModel = aiConfig.model;
+        if (reqUrl.startsWith('/chat/')) {
+          reqUrl = reqUrl.slice('/chat'.length);
+          overrideModel = aiConfig.chatModel;
+        } else if (reqUrl.startsWith('/cron/')) {
+          reqUrl = reqUrl.slice('/cron'.length);
+          overrideModel = aiConfig.cronModel;
+        }
+
+        // Rewrite model in request body if a model override is configured
         let body = Buffer.concat(chunks);
-        const overrideModel = aiConfig.model;
-        if (req.url?.includes('/messages') && body.length > 0) {
+        if (reqUrl.includes('/messages') && body.length > 0) {
           try {
             const parsed = JSON.parse(body.toString());
             if (parsed.model !== undefined) {
@@ -122,7 +134,7 @@ export function startCredentialProxy(
           }
         }
 
-        const upstreamPath = basePath + req.url;
+        const upstreamPath = basePath + reqUrl;
 
         const upstream = makeRequest(
           {

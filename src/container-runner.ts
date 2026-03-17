@@ -42,6 +42,8 @@ export interface ContainerInput {
   chatJid: string;
   isMain: boolean;
   isScheduledTask?: boolean;
+  /** Controls which model the credential proxy selects. Defaults to 'chat'. */
+  runType?: 'chat' | 'cron';
   assistantName?: string;
   imageAttachments?: Array<{ data: string; media_type: string }>;
 }
@@ -236,6 +238,7 @@ function buildContainerArgs(
   mounts: VolumeMount[],
   containerName: string,
   groupFolder: string,
+  runType: 'chat' | 'cron' = 'chat',
 ): string[] {
   const args: string[] = ['run', '-i', '--rm', '--name', containerName];
 
@@ -245,10 +248,11 @@ function buildContainerArgs(
   // Tell the agent its own group folder so tools like kanban know which scope to use.
   args.push('-e', `NANOCLAW_GROUP_FOLDER=${groupFolder}`);
 
-  // Route API traffic through the credential proxy (containers never see real secrets)
+  // Route API traffic through the credential proxy (containers never see real secrets).
+  // The /<runType> prefix tells the proxy which model override to use.
   args.push(
     '-e',
-    `ANTHROPIC_BASE_URL=http://${CONTAINER_HOST_GATEWAY}:${CREDENTIAL_PROXY_PORT}`,
+    `ANTHROPIC_BASE_URL=http://${CONTAINER_HOST_GATEWAY}:${CREDENTIAL_PROXY_PORT}/${runType}`,
   );
 
   // Pass all active MCP server URLs as a JSON array.
@@ -326,6 +330,7 @@ export async function runContainerAgent(
     mounts,
     containerName,
     input.groupFolder,
+    input.runType ?? 'chat',
   );
 
   logger.debug(

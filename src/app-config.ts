@@ -6,7 +6,12 @@ import { logger } from './logger.js';
 interface AiEndpointConfig {
   endpoint?: string;
   key: string;
+  /** Default model override (used when chatModel/cronModel are not set). */
   model?: string;
+  /** Model for chat messages and heartbeat runs. Falls back to model. */
+  chatModel?: string;
+  /** Model for scheduled cron tasks. Falls back to model. */
+  cronModel?: string;
 }
 
 /** An npx or uvx stdio MCP server wrapped in a container. */
@@ -214,14 +219,19 @@ export function getActiveAiConfig(): {
   endpoint: string;
   key: string;
   model: string;
+  chatModel: string;
+  cronModel: string;
 } {
   const config = loadAppConfig();
   const type = config.ai.type;
   const active = config.ai[type];
+  const defaultModel = active.model || '';
   return {
     type,
     endpoint: active.endpoint || '',
     key: active.key || '',
-    model: active.model || '',
+    model: defaultModel,
+    chatModel: active.chatModel || defaultModel,
+    cronModel: active.cronModel || defaultModel,
   };
 }

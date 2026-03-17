@@ -187,6 +187,10 @@ async function runTask(
     }, TASK_CLOSE_DELAY_MS);
   };
 
+  // Heartbeats share the chat model (they're user-facing proactive messages).
+  // Explicit cron tasks created by agents use the cron model.
+  const runType = task.id.startsWith(HEARTBEAT_TASK_PREFIX) ? 'chat' : 'cron';
+
   try {
     const output = await runContainerAgent(
       group,
@@ -197,6 +201,7 @@ async function runTask(
         chatJid: task.chat_jid,
         isMain,
         isScheduledTask: true,
+        runType,
         assistantName: ASSISTANT_NAME,
       },
       (proc, containerName) =>

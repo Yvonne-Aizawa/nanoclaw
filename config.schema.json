@@ -144,7 +144,9 @@
       "properties": {
         "endpoint": { "type": "string", "description": "Custom API endpoint URL" },
         "key": { "type": "string" },
-        "model": { "type": "string", "description": "Model ID override" }
+        "model": { "type": "string", "description": "Default model ID override (used when chatModel/cronModel are not set)" },
+        "chatModel": { "type": "string", "description": "Model for chat messages and heartbeat runs. Falls back to model." },
+        "cronModel": { "type": "string", "description": "Model for scheduled cron tasks created by agents. Falls back to model." }
       }
     },
     "mcpResourceLimits": {
