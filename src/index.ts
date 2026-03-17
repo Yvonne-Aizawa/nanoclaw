@@ -769,6 +769,11 @@ async function main(): Promise<void> {
       if (!channel?.sendFile) return Promise.resolve();
       return channel.sendFile(jid, filePath, caption);
     },
+    sendReaction: (jid, messageId, emoji) => {
+      const channel = findChannel(channels, jid);
+      if (!channel?.sendReaction) return Promise.resolve();
+      return channel.sendReaction(jid, messageId, emoji);
+    },
     registeredGroups: () => registeredGroups,
     registerGroup,
     syncGroups: async (force: boolean) => {

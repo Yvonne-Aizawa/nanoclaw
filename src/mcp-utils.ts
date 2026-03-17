@@ -4,13 +4,16 @@
  */
 
 import { randomUUID } from 'crypto';
+import fs from 'fs';
 import { IncomingMessage, ServerResponse } from 'http';
+import path from 'path';
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 
 import { InProcessMcpHandler } from './mcp-brave.js';
+import { DATA_DIR } from './config.js';
 
 const MAX_WAIT_SECONDS = 300;
 
@@ -41,6 +44,39 @@ export function createUtilsHandler(): InProcessMcpHandler {
         return {
           content: [
             { type: 'text' as const, text: `Waited ${clamped} seconds.` },
+          ],
+        };
+      },
+    );
+
+    server.tool(
+      'react_to_message',
+      'React to a message with an emoji. Pass an empty string for emoji to remove the reaction.',
+      {
+        chat_jid: z.string().describe('The chat JID (e.g. tg:123456789)'),
+        message_id: z.string().describe('The message ID to react to'),
+        emoji: z.string().describe('The emoji to react with, or empty string to remove'),
+        group_folder: z.string().describe('Your group folder name (used to route the IPC message)'),
+      },
+      async ({ chat_jid, message_id, emoji, group_folder }) => {
+        const messagesDir = path.join(DATA_DIR, 'ipc', group_folder, 'messages');
+        fs.mkdirSync(messagesDir, { recursive: true });
+        const payload = JSON.stringify({
+          type: 'react',
+          chatJid: chat_jid,
+          messageId: message_id,
+          emoji,
+        });
+        const file = path.join(messagesDir, `react-${Date.now()}-${randomUUID()}.json`);
+        fs.writeFileSync(file, payload);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: emoji
+                ? `Reaction ${emoji} sent to message ${message_id}.`
+                : `Reaction removed from message ${message_id}.`,
+            },
           ],
         };
       },

@@ -147,6 +147,23 @@ function createSchema(database: Database.Database): void {
   } catch {
     /* columns already exist */
   }
+
+  // Add reactions table (migration for existing DBs)
+  try {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS reactions (
+        chat_jid TEXT NOT NULL,
+        message_id TEXT NOT NULL,
+        sender TEXT NOT NULL,
+        emoji TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        PRIMARY KEY (chat_jid, message_id, sender)
+      );
+      CREATE INDEX IF NOT EXISTS idx_reactions_chat ON reactions(chat_jid, message_id);
+    `);
+  } catch {
+    /* table already exists */
+  }
 }
 
 export function initDatabase(): void {
@@ -642,6 +659,44 @@ export function getAllRegisteredGroups(): Record<string, RegisteredGroup> {
     };
   }
   return result;
+}
+
+// --- Reactions ---
+
+export function upsertReaction(
+  chatJid: string,
+  messageId: string,
+  sender: string,
+  emoji: string,
+  timestamp: string,
+): void {
+  if (emoji) {
+    db.prepare(
+      `INSERT OR REPLACE INTO reactions (chat_jid, message_id, sender, emoji, timestamp)
+       VALUES (?, ?, ?, ?, ?)`,
+    ).run(chatJid, messageId, sender, emoji, timestamp);
+  } else {
+    // Empty emoji = reaction removed
+    db.prepare(
+      `DELETE FROM reactions WHERE chat_jid = ? AND message_id = ? AND sender = ?`,
+    ).run(chatJid, messageId, sender);
+  }
+}
+
+export function getReactions(
+  chatJid: string,
+  messageId: string,
+): Array<{ sender: string; emoji: string; timestamp: string }> {
+  return db
+    .prepare(
+      `SELECT sender, emoji, timestamp FROM reactions
+       WHERE chat_jid = ? AND message_id = ? ORDER BY timestamp`,
+    )
+    .all(chatJid, messageId) as Array<{
+    sender: string;
+    emoji: string;
+    timestamp: string;
+  }>;
 }
 
 // --- JSON migration ---

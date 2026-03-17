@@ -87,6 +87,8 @@ export interface Channel {
   sendMessage(jid: string, text: string): Promise<void>;
   /** Send a file from the host filesystem. Caption is optional. */
   sendFile?(jid: string, filePath: string, caption?: string): Promise<void>;
+  /** Set a reaction emoji on a message. Empty string removes the reaction. */
+  sendReaction?(jid: string, messageId: string, emoji: string): Promise<void>;
   isConnected(): boolean;
   ownsJid(jid: string): boolean;
   disconnect(): Promise<void>;

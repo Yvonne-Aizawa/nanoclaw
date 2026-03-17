@@ -5,6 +5,7 @@ import { Api, Bot, InputFile } from 'grammy';
 
 import { loadAppConfig } from '../app-config.js';
 import { ASSISTANT_NAME, GROUPS_DIR, TRIGGER_PATTERN } from '../config.js';
+import { upsertReaction } from '../db.js';
 import { logger } from '../logger.js';
 import { registerChannel, ChannelOpts } from './registry.js';
 import {
@@ -403,7 +404,10 @@ export class TelegramChannel implements Channel {
             }
           }
         } catch (err) {
-          logger.warn({ err, fileName }, 'Failed to download Telegram document');
+          logger.warn(
+            { err, fileName },
+            'Failed to download Telegram document',
+          );
         }
       }
 
@@ -428,6 +432,48 @@ export class TelegramChannel implements Channel {
     this.bot.on('message:location', (ctx) => storeNonText(ctx, '[Location]'));
     this.bot.on('message:contact', (ctx) => storeNonText(ctx, '[Contact]'));
 
+    // Handle message reactions
+    this.bot.on('message_reaction', (ctx) => {
+      const chatJid = `tg:${ctx.chat.id}`;
+      const group = this.opts.registeredGroups()[chatJid];
+      if (!group) return;
+
+      const messageId = ctx.messageReaction.message_id.toString();
+      const sender =
+        ctx.messageReaction.user?.id?.toString() ||
+        ctx.messageReaction.actor_chat?.id?.toString() ||
+        'unknown';
+      const timestamp = new Date(
+        ctx.messageReaction.date * 1000,
+      ).toISOString();
+
+      // new_reaction is the current emoji(s); empty array means removed
+      const newReactions = ctx.messageReaction.new_reaction ?? [];
+      const oldReactions = ctx.messageReaction.old_reaction ?? [];
+
+      // Removed reactions (in old but not in new)
+      for (const r of oldReactions) {
+        if (r.type === 'emoji') {
+          const stillPresent = newReactions.some(
+            (n) => n.type === 'emoji' && n.emoji === r.emoji,
+          );
+          if (!stillPresent) {
+            upsertReaction(chatJid, messageId, sender, '', timestamp);
+          }
+        }
+      }
+      // Added reactions
+      for (const r of newReactions) {
+        if (r.type === 'emoji') {
+          upsertReaction(chatJid, messageId, sender, r.emoji, timestamp);
+          logger.debug(
+            { chatJid, messageId, sender, emoji: r.emoji },
+            'Telegram reaction stored',
+          );
+        }
+      }
+    });
+
     // Handle errors gracefully
     this.bot.catch((err) => {
       logger.error({ err: err.message }, 'Telegram bot error');
@@ -436,6 +482,12 @@ export class TelegramChannel implements Channel {
     // Start polling — returns a Promise that resolves when started
     return new Promise<void>((resolve) => {
       this.bot!.start({
+        allowed_updates: [
+          'message',
+          'message_reaction',
+          'callback_query',
+          'chat_member',
+        ],
         onStart: (botInfo) => {
           logger.info(
             { username: botInfo.username, id: botInfo.id },
@@ -509,6 +561,26 @@ export class TelegramChannel implements Channel {
       logger.info({ jid, filePath }, 'Telegram file sent');
     } catch (err) {
       logger.error({ jid, filePath, err }, 'Failed to send Telegram file');
+    }
+  }
+
+  async sendReaction(
+    jid: string,
+    messageId: string,
+    emoji: string,
+  ): Promise<void> {
+    if (!this.bot) return;
+    const numericId = jid.replace(/^tg:/, '');
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (this.bot.api as any).setMessageReaction(
+        Number(numericId),
+        Number(messageId),
+        emoji ? [{ type: 'emoji', emoji }] : [],
+      );
+      logger.info({ jid, messageId, emoji }, 'Telegram reaction sent');
+    } catch (err) {
+      logger.error({ jid, messageId, emoji, err }, 'Failed to send Telegram reaction');
     }
   }
 
