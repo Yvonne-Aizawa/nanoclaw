@@ -22,6 +22,7 @@ import {
 import { logger } from './logger.js';
 import { createBraveHandler, InProcessMcpHandler } from './mcp-brave.js';
 import { createCalDavHandler } from './mcp-caldav.js';
+import { createKanbanHandler } from './mcp-kanban.js';
 import { createUtilsHandler } from './mcp-utils.js';
 
 /** Single host-side MCP router server (routes /<name>/mcp to each backend). */
@@ -438,6 +439,8 @@ function startInProcessMcpServers(): void {
   }
   inProcessHandlers.set('utils', createUtilsHandler());
   logger.info('Utils MCP server started in-process');
+  inProcessHandlers.set('kanban', createKanbanHandler());
+  logger.info('Kanban MCP server started in-process');
 }
 
 export async function startMcpContainers(): Promise<void> {
@@ -515,6 +518,7 @@ export function getMcpServerUrls(groupFolder?: string): Array<{
 
   // All servers are routed through the host MCP router at /<name>/mcp
   servers.push({ name: 'utils', url: `${base}/utils/mcp` });
+  servers.push({ name: 'kanban', url: `${base}/kanban/mcp` });
   if (browser?.enabled) {
     servers.push({
       name: 'playwright',

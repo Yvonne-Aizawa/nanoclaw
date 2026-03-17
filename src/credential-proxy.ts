@@ -57,7 +57,10 @@ export function startCredentialProxy(
         );
         upstream.on('error', (err) => {
           logger.error({ err, url: req.url }, 'Ollama proxy error');
-          if (!res.headersSent) { res.writeHead(502); res.end('Bad Gateway'); }
+          if (!res.headersSent) {
+            res.writeHead(502);
+            res.end('Bad Gateway');
+          }
         });
         req.pipe(upstream);
         return;

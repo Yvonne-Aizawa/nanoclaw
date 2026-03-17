@@ -164,6 +164,34 @@ function createSchema(database: Database.Database): void {
   } catch {
     /* table already exists */
   }
+
+  // Add kanban tables (migration for existing DBs)
+  try {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS kanban_columns (
+        id TEXT PRIMARY KEY,
+        group_folder TEXT NOT NULL,
+        name TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_kanban_columns_group ON kanban_columns(group_folder, position);
+
+      CREATE TABLE IF NOT EXISTS kanban_cards (
+        id TEXT PRIMARY KEY,
+        group_folder TEXT NOT NULL,
+        column_id TEXT NOT NULL REFERENCES kanban_columns(id),
+        title TEXT NOT NULL,
+        description TEXT,
+        position INTEGER NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_kanban_cards_column ON kanban_cards(column_id, position);
+    `);
+  } catch {
+    /* tables already exist */
+  }
 }
 
 export function initDatabase(): void {
@@ -697,6 +725,226 @@ export function getReactions(
     emoji: string;
     timestamp: string;
   }>;
+}
+
+// --- Kanban ---
+
+export interface KanbanColumn {
+  id: string;
+  group_folder: string;
+  name: string;
+  position: number;
+  created_at: string;
+}
+
+export interface KanbanCard {
+  id: string;
+  group_folder: string;
+  column_id: string;
+  title: string;
+  description: string | null;
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KanbanBoard {
+  columns: Array<KanbanColumn & { cards: KanbanCard[] }>;
+}
+
+const DEFAULT_COLUMNS = ['To Do', 'In Progress', 'Done'];
+
+export function getKanbanBoard(groupFolder: string): KanbanBoard {
+  // Seed default columns on first access
+  const existing = db
+    .prepare('SELECT id FROM kanban_columns WHERE group_folder = ? LIMIT 1')
+    .get(groupFolder);
+  if (!existing) {
+    const now = new Date().toISOString();
+    for (let i = 0; i < DEFAULT_COLUMNS.length; i++) {
+      db.prepare(
+        `INSERT INTO kanban_columns (id, group_folder, name, position, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      ).run(
+        `${groupFolder}-col-${i}`,
+        groupFolder,
+        DEFAULT_COLUMNS[i],
+        i,
+        now,
+      );
+    }
+  }
+
+  const columns = db
+    .prepare(
+      `SELECT * FROM kanban_columns WHERE group_folder = ? ORDER BY position`,
+    )
+    .all(groupFolder) as KanbanColumn[];
+
+  const cards = db
+    .prepare(
+      `SELECT * FROM kanban_cards WHERE group_folder = ? ORDER BY position`,
+    )
+    .all(groupFolder) as KanbanCard[];
+
+  const cardsByColumn = new Map<string, KanbanCard[]>();
+  for (const card of cards) {
+    if (!cardsByColumn.has(card.column_id)) cardsByColumn.set(card.column_id, []);
+    cardsByColumn.get(card.column_id)!.push(card);
+  }
+
+  return {
+    columns: columns.map((col) => ({
+      ...col,
+      cards: cardsByColumn.get(col.id) ?? [],
+    })),
+  };
+}
+
+export function createKanbanColumn(
+  groupFolder: string,
+  name: string,
+): KanbanColumn {
+  const id = `${groupFolder}-col-${Date.now()}`;
+  const maxPos = (
+    db
+      .prepare(
+        'SELECT MAX(position) as m FROM kanban_columns WHERE group_folder = ?',
+      )
+      .get(groupFolder) as { m: number | null }
+  ).m;
+  const position = (maxPos ?? -1) + 1;
+  const now = new Date().toISOString();
+  db.prepare(
+    `INSERT INTO kanban_columns (id, group_folder, name, position, created_at) VALUES (?, ?, ?, ?, ?)`,
+  ).run(id, groupFolder, name, position, now);
+  return { id, group_folder: groupFolder, name, position, created_at: now };
+}
+
+export function renameKanbanColumn(
+  columnId: string,
+  groupFolder: string,
+  name: string,
+): void {
+  db.prepare(
+    `UPDATE kanban_columns SET name = ? WHERE id = ? AND group_folder = ?`,
+  ).run(name, columnId, groupFolder);
+}
+
+export function deleteKanbanColumn(
+  columnId: string,
+  groupFolder: string,
+): void {
+  // Move cards to the first remaining column
+  const firstOther = db
+    .prepare(
+      `SELECT id FROM kanban_columns WHERE group_folder = ? AND id != ? ORDER BY position LIMIT 1`,
+    )
+    .get(groupFolder, columnId) as { id: string } | undefined;
+
+  if (firstOther) {
+    const maxPos = (
+      db
+        .prepare(
+          'SELECT MAX(position) as m FROM kanban_cards WHERE column_id = ?',
+        )
+        .get(firstOther.id) as { m: number | null }
+    ).m ?? -1;
+    const cards = db
+      .prepare(`SELECT id FROM kanban_cards WHERE column_id = ? ORDER BY position`)
+      .all(columnId) as { id: string }[];
+    for (let i = 0; i < cards.length; i++) {
+      db.prepare(
+        `UPDATE kanban_cards SET column_id = ?, position = ?, updated_at = ? WHERE id = ?`,
+      ).run(firstOther.id, maxPos + 1 + i, new Date().toISOString(), cards[i].id);
+    }
+  } else {
+    // No other column — delete cards
+    db.prepare(`DELETE FROM kanban_cards WHERE column_id = ?`).run(columnId);
+  }
+
+  db.prepare(`DELETE FROM kanban_columns WHERE id = ? AND group_folder = ?`).run(
+    columnId,
+    groupFolder,
+  );
+}
+
+export function addKanbanCard(
+  groupFolder: string,
+  columnId: string,
+  title: string,
+  description?: string,
+): KanbanCard {
+  const id = `card-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const maxPos = (
+    db
+      .prepare('SELECT MAX(position) as m FROM kanban_cards WHERE column_id = ?')
+      .get(columnId) as { m: number | null }
+  ).m;
+  const position = (maxPos ?? -1) + 1;
+  const now = new Date().toISOString();
+  db.prepare(
+    `INSERT INTO kanban_cards (id, group_folder, column_id, title, description, position, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(id, groupFolder, columnId, title, description ?? null, position, now, now);
+  return {
+    id,
+    group_folder: groupFolder,
+    column_id: columnId,
+    title,
+    description: description ?? null,
+    position,
+    created_at: now,
+    updated_at: now,
+  };
+}
+
+export function updateKanbanCard(
+  cardId: string,
+  groupFolder: string,
+  title?: string,
+  description?: string,
+): void {
+  const now = new Date().toISOString();
+  if (title !== undefined && description !== undefined) {
+    db.prepare(
+      `UPDATE kanban_cards SET title = ?, description = ?, updated_at = ? WHERE id = ? AND group_folder = ?`,
+    ).run(title, description, now, cardId, groupFolder);
+  } else if (title !== undefined) {
+    db.prepare(
+      `UPDATE kanban_cards SET title = ?, updated_at = ? WHERE id = ? AND group_folder = ?`,
+    ).run(title, now, cardId, groupFolder);
+  } else if (description !== undefined) {
+    db.prepare(
+      `UPDATE kanban_cards SET description = ?, updated_at = ? WHERE id = ? AND group_folder = ?`,
+    ).run(description, now, cardId, groupFolder);
+  }
+}
+
+export function moveKanbanCard(
+  cardId: string,
+  groupFolder: string,
+  columnId: string,
+  position?: number,
+): void {
+  const now = new Date().toISOString();
+  if (position === undefined) {
+    const maxPos = (
+      db
+        .prepare('SELECT MAX(position) as m FROM kanban_cards WHERE column_id = ?')
+        .get(columnId) as { m: number | null }
+    ).m;
+    position = (maxPos ?? -1) + 1;
+  }
+  db.prepare(
+    `UPDATE kanban_cards SET column_id = ?, position = ?, updated_at = ? WHERE id = ? AND group_folder = ?`,
+  ).run(columnId, position, now, cardId, groupFolder);
+}
+
+export function deleteKanbanCard(cardId: string, groupFolder: string): void {
+  db.prepare(
+    `DELETE FROM kanban_cards WHERE id = ? AND group_folder = ?`,
+  ).run(cardId, groupFolder);
 }
 
 // --- JSON migration ---
