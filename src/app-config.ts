@@ -203,6 +203,14 @@ export interface AppConfig {
         /** CPU limit (fractional cores). Defaults to 0.5. */
         cpus?: number;
       };
+      /**
+       * MCP server allowlist for this group.
+       * If set, the agent can only access the listed servers.
+       * If omitted, the group has access to all servers (default behaviour).
+       */
+      mcp?: {
+        allowlist: string[];
+      };
     }
   >;
   /**

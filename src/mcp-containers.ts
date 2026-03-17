@@ -511,8 +511,12 @@ export function getMcpServerUrls(groupFolder?: string): Array<{
   url: string;
   mounts?: McpMount[];
 }> {
-  const { tools, mcp } = loadAppConfig();
+  const config = loadAppConfig();
+  const { tools, mcp } = config;
   const { brave, caldav, browser } = tools ?? {};
+  const allowlist = groupFolder
+    ? config.group?.[groupFolder]?.mcp?.allowlist
+    : undefined;
   const routerPort = mcp?.routerPort ?? 7700;
   const base = `http://${CONTAINER_HOST_GATEWAY}:${routerPort}`;
   const servers: Array<{ name: string; url: string; mounts?: McpMount[] }> = [];
@@ -554,6 +558,9 @@ export function getMcpServerUrls(groupFolder?: string): Array<{
     });
   }
 
+  if (allowlist) {
+    return servers.filter((s) => allowlist.includes(s.name));
+  }
   return servers;
 }
 

@@ -189,6 +189,19 @@
                 "description": "CPU limit (fractional cores). Defaults to 0.5"
               }
             }
+          },
+          "mcp": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "MCP server restrictions for this group",
+            "required": ["allowlist"],
+            "properties": {
+              "allowlist": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Explicit list of MCP server names this group may access. Omit to allow all."
+              }
+            }
           }
         }
       }
