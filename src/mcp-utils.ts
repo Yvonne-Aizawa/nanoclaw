@@ -31,10 +31,17 @@ export function createUtilsHandler(): InProcessMcpHandler {
           .describe(`Number of seconds to wait (1–${MAX_WAIT_SECONDS})`),
       },
       async ({ seconds }) => {
-        const clamped = Math.min(Math.max(Math.round(seconds), 1), MAX_WAIT_SECONDS);
-        await new Promise<void>((resolve) => setTimeout(resolve, clamped * 1000));
+        const clamped = Math.min(
+          Math.max(Math.round(seconds), 1),
+          MAX_WAIT_SECONDS,
+        );
+        await new Promise<void>((resolve) =>
+          setTimeout(resolve, clamped * 1000),
+        );
         return {
-          content: [{ type: 'text' as const, text: `Waited ${clamped} seconds.` }],
+          content: [
+            { type: 'text' as const, text: `Waited ${clamped} seconds.` },
+          ],
         };
       },
     );
