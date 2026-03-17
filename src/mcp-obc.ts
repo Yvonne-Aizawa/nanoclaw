@@ -111,13 +111,16 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
         const res = await apiJson('GET', '/agents/me');
         if (!res.ok) {
           return {
-            content: [{ type: 'text' as const, text: `Error: HTTP ${res.status}` }],
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
             isError: true,
           };
         }
         const me = (await res.json()) as Record<string, unknown>;
         const parts: string[] = [];
-        if (me.x !== undefined && me.y !== undefined) parts.push(`Position: ${me.x},${me.y}`);
+        if (me.x !== undefined && me.y !== undefined)
+          parts.push(`Position: ${me.x},${me.y}`);
         if (me.zone_name) parts.push(`Zone: ${me.zone_name}`);
         if (me.building_name) parts.push(`Building: ${me.building_name}`);
         if (Array.isArray(me.nearby_bots) && me.nearby_bots.length > 0) {
@@ -129,7 +132,12 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           if (names) parts.push(`Nearby: ${names}`);
         }
         return {
-          content: [{ type: 'text' as const, text: parts.join('\n') || JSON.stringify(me) }],
+          content: [
+            {
+              type: 'text' as const,
+              text: parts.join('\n') || JSON.stringify(me),
+            },
+          ],
         };
       },
     );
@@ -171,7 +179,9 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           content: [
             {
               type: 'text' as const,
-              text: res.ok ? `Moved to ${x},${y}.` : `Error: HTTP ${res.status}`,
+              text: res.ok
+                ? `Moved to ${x},${y}.`
+                : `Error: HTTP ${res.status}`,
             },
           ],
         };
@@ -287,25 +297,20 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
       },
     );
 
-    server.tool(
-      'obc_leave',
-      'Leave the current building.',
-      {},
-      async () => {
-        const sid = readBuildingSessionId(groupFolder);
-        const body = sid ? { session_id: sid } : {};
-        const res = await apiJson('POST', '/buildings/leave', body);
-        writeBuildingSessionId(groupFolder, null);
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: res.ok ? 'Left building.' : `Error: HTTP ${res.status}`,
-            },
-          ],
-        };
-      },
-    );
+    server.tool('obc_leave', 'Leave the current building.', {}, async () => {
+      const sid = readBuildingSessionId(groupFolder);
+      const body = sid ? { session_id: sid } : {};
+      const res = await apiJson('POST', '/buildings/leave', body);
+      writeBuildingSessionId(groupFolder, null);
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: res.ok ? 'Left building.' : `Error: HTTP ${res.status}`,
+          },
+        ],
+      };
+    });
 
     server.tool(
       'obc_react',
@@ -347,7 +352,9 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           content: [
             {
               type: 'text' as const,
-              text: res.ok ? 'Artifact published.' : `Error: HTTP ${res.status}`,
+              text: res.ok
+                ? 'Artifact published.'
+                : `Error: HTTP ${res.status}`,
             },
           ],
         };
@@ -405,6 +412,1219 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
             },
           ],
         };
+      },
+    );
+
+    // ─── Identity & Profile ─────────────────────────────
+
+    server.tool(
+      'obc_update_profile',
+      'Update your bot profile (display name, bio, avatar URL, etc.).',
+      {
+        display_name: z.string().optional().describe('New display name'),
+        bio: z.string().optional().describe('Bio / description'),
+        avatar_url: z.string().optional().describe('Avatar image URL'),
+      },
+      async (params) => {
+        const body = Object.fromEntries(
+          Object.entries(params).filter(([, v]) => v !== undefined),
+        );
+        const res = await apiJson('PATCH', '/agents/profile', body);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: res.ok ? 'Profile updated.' : `Error: HTTP ${res.status}`,
+            },
+          ],
+        };
+      },
+    );
+
+    server.tool(
+      'obc_get_profile',
+      "Get another bot's profile.",
+      { bot_id: z.string().describe("Target bot's ID") },
+      async ({ bot_id }) => {
+        const res = await apiJson('GET', `/agents/profile/${bot_id}`);
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Record<string, unknown>;
+        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+      },
+    );
+
+    server.tool(
+      'obc_get_nearby',
+      'Find bots near your current position.',
+      {},
+      async () => {
+        const res = await apiJson('GET', '/agents/nearby');
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Array<Record<string, unknown>>;
+        if (!Array.isArray(data) || data.length === 0)
+          return { content: [{ type: 'text' as const, text: 'No nearby bots.' }] };
+        const lines = data
+          .slice(0, 20)
+          .map(
+            (b) =>
+              `${b.display_name ?? b.name ?? b.id} — pos: ${b.x ?? '?'},${b.y ?? '?'} zone: ${b.zone_name ?? '?'}`,
+          );
+        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      },
+    );
+
+    server.tool(
+      'obc_get_balance',
+      'Get credit balance for yourself or another bot.',
+      {
+        bot_id: z
+          .string()
+          .optional()
+          .describe('Bot ID (omit to get your own balance)'),
+      },
+      async ({ bot_id }) => {
+        let id = bot_id;
+        if (!id) {
+          const me = await apiJson('GET', '/agents/me');
+          if (!me.ok)
+            return {
+              content: [
+                { type: 'text' as const, text: `Error fetching own ID: HTTP ${me.status}` },
+              ],
+              isError: true,
+            };
+          const meData = (await me.json()) as { id?: string };
+          id = meData.id;
+        }
+        const res = await apiJson('GET', `/agents/${id}/balance`);
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Record<string, unknown>;
+        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+      },
+    );
+
+    // ─── World & Navigation ──────────────────────────────
+
+    server.tool(
+      'obc_zone_transfer',
+      'Transfer to a different zone on the city map.',
+      { zone_id: z.string().describe('Destination zone ID') },
+      async ({ zone_id }) => {
+        const res = await apiJson('POST', '/world/zone-transfer', { zone_id });
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: res.ok ? `Transferred to zone ${zone_id}.` : `Error: HTTP ${res.status}`,
+            },
+          ],
+        };
+      },
+    );
+
+    server.tool(
+      'obc_get_map',
+      'List all open zones on the city map.',
+      {},
+      async () => {
+        const res = await apiJson('GET', '/world/map');
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Array<Record<string, unknown>>;
+        if (!Array.isArray(data) || data.length === 0)
+          return { content: [{ type: 'text' as const, text: 'No zones found.' }] };
+        const lines = data.map(
+          (z) => `[${z.id}] ${z.name ?? z.zone_name ?? '?'} — ${z.description ?? ''}`.trim(),
+        );
+        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      },
+    );
+
+    server.tool(
+      'obc_get_ticker',
+      'Get the live city news ticker.',
+      {},
+      async () => {
+        const res = await apiJson('GET', '/world/ticker');
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Record<string, unknown>;
+        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+      },
+    );
+
+    // ─── Buildings ───────────────────────────────────────
+
+    server.tool(
+      'obc_building_actions',
+      'List available actions inside a building.',
+      { building_id: z.number().int().positive().describe('Building numeric ID') },
+      async ({ building_id }) => {
+        const res = await apiJson('GET', `/buildings/${building_id}/actions`);
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Array<Record<string, unknown>>;
+        if (!Array.isArray(data) || data.length === 0)
+          return { content: [{ type: 'text' as const, text: 'No actions available.' }] };
+        const lines = data.map(
+          (a) => `[${a.id ?? a.action_id}] ${a.name ?? a.label ?? '?'}: ${a.description ?? ''}`.trim(),
+        );
+        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      },
+    );
+
+    server.tool(
+      'obc_building_execute',
+      'Execute an action inside the current building.',
+      {
+        building_id: z.number().int().positive().describe('Building numeric ID'),
+        action_id: z.string().describe('Action ID (from obc_building_actions)'),
+        params: z
+          .record(z.string(), z.unknown())
+          .optional()
+          .describe('Optional action parameters as a JSON object'),
+      },
+      async ({ building_id, action_id, params }) => {
+        const res = await apiJson(
+          'POST',
+          `/buildings/${building_id}/actions/execute`,
+          { action_id, ...(params ?? {}) },
+        );
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Record<string, unknown>;
+        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+      },
+    );
+
+    // ─── DM & Social ─────────────────────────────────────
+
+    server.tool(
+      'obc_dm_check',
+      'Check for pending incoming DM requests.',
+      {},
+      async () => {
+        const res = await apiJson('GET', '/dm/check');
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Record<string, unknown>;
+        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+      },
+    );
+
+    server.tool(
+      'obc_dm_approve',
+      'Approve an incoming DM request.',
+      { request_id: z.string().describe('DM request ID') },
+      async ({ request_id }) => {
+        const res = await apiJson('POST', `/dm/requests/${request_id}/approve`, {});
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: res.ok ? 'DM request approved.' : `Error: HTTP ${res.status}`,
+            },
+          ],
+        };
+      },
+    );
+
+    server.tool(
+      'obc_dm_reject',
+      'Reject an incoming DM request.',
+      { request_id: z.string().describe('DM request ID') },
+      async ({ request_id }) => {
+        const res = await apiJson('POST', `/dm/requests/${request_id}/reject`, {});
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: res.ok ? 'DM request rejected.' : `Error: HTTP ${res.status}`,
+            },
+          ],
+        };
+      },
+    );
+
+    server.tool(
+      'obc_dm_list',
+      'List your DM conversations.',
+      {},
+      async () => {
+        const res = await apiJson('GET', '/dm/conversations');
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Array<Record<string, unknown>>;
+        if (!Array.isArray(data) || data.length === 0)
+          return { content: [{ type: 'text' as const, text: 'No conversations.' }] };
+        const lines = data.map(
+          (c) =>
+            `[${c.id}] with ${c.other_display_name ?? c.other_name ?? '?'} — last: ${c.last_message_preview ?? ''}`.trim(),
+        );
+        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      },
+    );
+
+    server.tool(
+      'obc_dm_read',
+      'Read messages in a DM conversation.',
+      { conversation_id: z.string().describe('Conversation UUID') },
+      async ({ conversation_id }) => {
+        const res = await apiJson('GET', `/dm/conversations/${conversation_id}`);
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Record<string, unknown>;
+        const messages = Array.isArray(data)
+          ? data
+          : Array.isArray((data as { messages?: unknown[] }).messages)
+            ? (data as { messages: Array<Record<string, unknown>> }).messages
+            : [];
+        if (messages.length === 0)
+          return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+        const lines = (messages as Array<Record<string, unknown>>).map(
+          (m) => `${m.sender_name ?? m.from ?? '?'}: ${m.text ?? m.message ?? m.content ?? ''}`,
+        );
+        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      },
+    );
+
+    server.tool(
+      'obc_follow',
+      'Follow another bot.',
+      { bot_id: z.string().describe("Target bot's ID") },
+      async ({ bot_id }) => {
+        const res = await apiJson('POST', `/agents/${bot_id}/follow`, {});
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: res.ok ? `Now following ${bot_id}.` : `Error: HTTP ${res.status}`,
+            },
+          ],
+        };
+      },
+    );
+
+    server.tool(
+      'obc_unfollow',
+      'Unfollow a bot.',
+      { bot_id: z.string().describe("Target bot's ID") },
+      async ({ bot_id }) => {
+        const res = await apiJson('DELETE', `/agents/${bot_id}/follow`);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: res.ok ? `Unfollowed ${bot_id}.` : `Error: HTTP ${res.status}`,
+            },
+          ],
+        };
+      },
+    );
+
+    server.tool(
+      'obc_interact',
+      'Interact with a nearby bot.',
+      {
+        bot_id: z.string().describe("Target bot's ID"),
+        interaction_type: z
+          .string()
+          .optional()
+          .describe('Type of interaction (e.g. wave, greet)'),
+      },
+      async ({ bot_id, interaction_type }) => {
+        const body: Record<string, unknown> = {};
+        if (interaction_type) body.interaction_type = interaction_type;
+        const res = await apiJson('POST', `/agents/${bot_id}/interact`, body);
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Record<string, unknown>;
+        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+      },
+    );
+
+    // ─── Proposals ───────────────────────────────────────
+
+    server.tool(
+      'obc_list_proposals',
+      'List your pending collaboration proposals.',
+      {},
+      async () => {
+        const res = await apiJson('GET', '/proposals');
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Array<Record<string, unknown>>;
+        if (!Array.isArray(data) || data.length === 0)
+          return { content: [{ type: 'text' as const, text: 'No proposals.' }] };
+        const lines = data.map(
+          (p) =>
+            `[${p.id}] ${p.type ?? '?'} from ${p.from_display_name ?? p.from ?? '?'}: ${p.message ?? ''}`.trim(),
+        );
+        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      },
+    );
+
+    server.tool(
+      'obc_reject_proposal',
+      'Reject a collaboration proposal.',
+      { proposal_id: z.string().describe('Proposal UUID') },
+      async ({ proposal_id }) => {
+        const res = await apiJson('POST', `/proposals/${proposal_id}/reject`, {});
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: res.ok ? 'Proposal rejected.' : `Error: HTTP ${res.status}`,
+            },
+          ],
+        };
+      },
+    );
+
+    // ─── Gallery & Artifacts ─────────────────────────────
+
+    server.tool(
+      'obc_gallery_browse',
+      'Browse published artifacts in the city gallery.',
+      {
+        limit: z
+          .number()
+          .int()
+          .optional()
+          .describe('Max number of results (default 20)'),
+      },
+      async ({ limit }) => {
+        const url = limit ? `/gallery?limit=${limit}` : '/gallery';
+        const res = await apiJson('GET', url);
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Array<Record<string, unknown>>;
+        if (!Array.isArray(data) || data.length === 0)
+          return { content: [{ type: 'text' as const, text: 'No artifacts found.' }] };
+        const lines = data.map(
+          (a) =>
+            `[${a.id}] "${a.title ?? '?'}" by ${a.creator_name ?? '?'} — reactions: ${a.reaction_count ?? 0}`,
+        );
+        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      },
+    );
+
+    server.tool(
+      'obc_gallery_get',
+      'Get details of a specific artifact.',
+      { artifact_id: z.string().describe('Artifact ID') },
+      async ({ artifact_id }) => {
+        const res = await apiJson('GET', `/gallery/${artifact_id}`);
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Record<string, unknown>;
+        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+      },
+    );
+
+    server.tool(
+      'obc_gallery_flag',
+      'Flag an artifact for moderation.',
+      {
+        artifact_id: z.string().describe('Artifact ID'),
+        reason: z.string().optional().describe('Reason for flagging'),
+      },
+      async ({ artifact_id, reason }) => {
+        const res = await apiJson('POST', `/gallery/${artifact_id}/flag`, {
+          ...(reason ? { reason } : {}),
+        });
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: res.ok ? 'Artifact flagged.' : `Error: HTTP ${res.status}`,
+            },
+          ],
+        };
+      },
+    );
+
+    // ─── Help Requests ───────────────────────────────────
+
+    server.tool(
+      'obc_help_create',
+      'Create a help request asking other bots for assistance.',
+      {
+        title: z.string().describe('Short title'),
+        description: z.string().describe('What you need help with'),
+        skill: z.string().optional().describe('Skill category needed'),
+      },
+      async ({ title, description, skill }) => {
+        const body: Record<string, unknown> = { title, description };
+        if (skill) body.skill = skill;
+        const res = await apiJson('POST', '/help-requests', body);
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Record<string, unknown>;
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Help request created (id: ${data.id ?? '?'}).`,
+            },
+          ],
+        };
+      },
+    );
+
+    server.tool(
+      'obc_help_list',
+      'List open help requests from other bots.',
+      {},
+      async () => {
+        const res = await apiJson('GET', '/help-requests');
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Array<Record<string, unknown>>;
+        if (!Array.isArray(data) || data.length === 0)
+          return { content: [{ type: 'text' as const, text: 'No help requests.' }] };
+        const lines = data.slice(0, 20).map(
+          (h) => `[${h.id}] "${h.title ?? '?'}" by ${h.creator_name ?? '?'}: ${h.description ?? ''}`.slice(0, 120),
+        );
+        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      },
+    );
+
+    server.tool(
+      'obc_help_status',
+      'Check the fulfillment status of a help request.',
+      { request_id: z.string().describe('Help request ID') },
+      async ({ request_id }) => {
+        const res = await apiJson('GET', `/help-requests/${request_id}/status`);
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Record<string, unknown>;
+        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+      },
+    );
+
+    server.tool(
+      'obc_help_fulfill',
+      'Fulfill a help request from another bot.',
+      {
+        request_id: z.string().describe('Help request ID'),
+        artifact_id: z
+          .string()
+          .optional()
+          .describe('Artifact ID you are submitting as fulfillment'),
+        message: z.string().optional().describe('Fulfillment message'),
+      },
+      async ({ request_id, artifact_id, message }) => {
+        const body: Record<string, unknown> = {};
+        if (artifact_id) body.artifact_id = artifact_id;
+        if (message) body.message = message;
+        const res = await apiJson('POST', `/help-requests/${request_id}/fulfill`, body);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: res.ok ? 'Help request fulfilled.' : `Error: HTTP ${res.status}`,
+            },
+          ],
+        };
+      },
+    );
+
+    server.tool(
+      'obc_help_decline',
+      'Decline a help request.',
+      { request_id: z.string().describe('Help request ID') },
+      async ({ request_id }) => {
+        const res = await apiJson('POST', `/help-requests/${request_id}/decline`, {});
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: res.ok ? 'Help request declined.' : `Error: HTTP ${res.status}`,
+            },
+          ],
+        };
+      },
+    );
+
+    // ─── Skills ──────────────────────────────────────────
+
+    server.tool(
+      'obc_skill_catalog',
+      'List all valid skill categories available in the city.',
+      {},
+      async () => {
+        const res = await apiJson('GET', '/skills/catalog');
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Array<Record<string, unknown>>;
+        if (!Array.isArray(data) || data.length === 0)
+          return { content: [{ type: 'text' as const, text: 'No skills found.' }] };
+        const lines = data.map((s) => `${s.id ?? s.name}: ${s.description ?? ''}`.trim());
+        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      },
+    );
+
+    server.tool(
+      'obc_skill_register',
+      'Declare your bot abilities/skills.',
+      {
+        skills: z
+          .array(z.string())
+          .describe('Array of skill IDs to register (from obc_skill_catalog)'),
+      },
+      async ({ skills }) => {
+        const res = await apiJson('POST', '/skills/register', { skills });
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: res.ok ? 'Skills registered.' : `Error: HTTP ${res.status}`,
+            },
+          ],
+        };
+      },
+    );
+
+    server.tool(
+      'obc_skill_search',
+      'Find bots that have a specific skill.',
+      { skill: z.string().describe('Skill ID to search for') },
+      async ({ skill }) => {
+        const res = await apiJson('GET', `/skills/search?skill=${encodeURIComponent(skill)}`);
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Array<Record<string, unknown>>;
+        if (!Array.isArray(data) || data.length === 0)
+          return { content: [{ type: 'text' as const, text: 'No bots found with that skill.' }] };
+        const lines = data
+          .slice(0, 20)
+          .map((b) => `${b.display_name ?? b.name ?? b.id} (score: ${b.score ?? '?'})`);
+        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      },
+    );
+
+    server.tool(
+      'obc_skill_get',
+      "Get a bot's registered skills.",
+      { bot_id: z.string().describe("Bot's ID") },
+      async ({ bot_id }) => {
+        const res = await apiJson('GET', `/skills/bot/${bot_id}`);
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Record<string, unknown>;
+        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+      },
+    );
+
+    server.tool(
+      'obc_skill_scores',
+      "View a bot's skill scores.",
+      { bot_id: z.string().describe("Bot's ID") },
+      async ({ bot_id }) => {
+        const res = await apiJson('GET', `/agents/${bot_id}/skill-scores`);
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Record<string, unknown>;
+        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+      },
+    );
+
+    server.tool(
+      'obc_milestones',
+      "View a bot's achievements and milestones.",
+      { bot_id: z.string().describe("Bot's ID") },
+      async ({ bot_id }) => {
+        const res = await apiJson('GET', `/agents/${bot_id}/milestones`);
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Array<Record<string, unknown>>;
+        if (!Array.isArray(data) || data.length === 0)
+          return { content: [{ type: 'text' as const, text: 'No milestones yet.' }] };
+        const lines = data.map(
+          (m) => `${m.title ?? m.name ?? '?'}: ${m.description ?? ''} (${m.achieved_at ?? '?'})`.trim(),
+        );
+        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      },
+    );
+
+    // ─── City Memory & Reflection ────────────────────────
+
+    server.tool(
+      'obc_reflect',
+      'Write a journal/reflection entry about your experiences in the city.',
+      { content: z.string().describe('Reflection text to record') },
+      async ({ content }) => {
+        const res = await apiJson('POST', '/agents/me/reflect', { content });
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: res.ok ? 'Reflection recorded.' : `Error: HTTP ${res.status}`,
+            },
+          ],
+        };
+      },
+    );
+
+    server.tool(
+      'obc_city_memory',
+      'Access your full city interaction history.',
+      {},
+      async () => {
+        const res = await apiJson('GET', '/agents/me/city-memory');
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Record<string, unknown>;
+        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+      },
+    );
+
+    server.tool(
+      'obc_city_reflection',
+      'Get behavior observations about yourself from the city.',
+      {},
+      async () => {
+        const res = await apiJson('GET', '/agents/me/city-reflection');
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Record<string, unknown>;
+        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+      },
+    );
+
+    server.tool(
+      'obc_identity_shift',
+      'Declare an identity change or evolution for your bot.',
+      {
+        description: z
+          .string()
+          .describe('Description of how your identity or focus has shifted'),
+      },
+      async ({ description }) => {
+        const res = await apiJson('POST', '/agents/me/identity-shift', {
+          description,
+        });
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: res.ok ? 'Identity shift recorded.' : `Error: HTTP ${res.status}`,
+            },
+          ],
+        };
+      },
+    );
+
+    // ─── Quests ──────────────────────────────────────────
+
+    server.tool(
+      'obc_quests_active',
+      'List active quests you can participate in.',
+      {},
+      async () => {
+        const res = await apiJson('GET', '/quests/active');
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Array<Record<string, unknown>>;
+        if (!Array.isArray(data) || data.length === 0)
+          return { content: [{ type: 'text' as const, text: 'No active quests.' }] };
+        const lines = data.map(
+          (q) => `[${q.id}] "${q.title ?? '?'}": ${q.description ?? ''} (deadline: ${q.deadline ?? 'none'})`.trim(),
+        );
+        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      },
+    );
+
+    server.tool(
+      'obc_quest_submit',
+      'Submit an artifact to a quest.',
+      {
+        quest_id: z.string().describe('Quest ID'),
+        artifact_id: z.string().describe('Artifact ID to submit'),
+        message: z.string().optional().describe('Submission note'),
+      },
+      async ({ quest_id, artifact_id, message }) => {
+        const body: Record<string, unknown> = { artifact_id };
+        if (message) body.message = message;
+        const res = await apiJson('POST', `/quests/${quest_id}/submit`, body);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: res.ok ? 'Artifact submitted to quest.' : `Error: HTTP ${res.status}`,
+            },
+          ],
+        };
+      },
+    );
+
+    server.tool(
+      'obc_quest_create',
+      'Create a new quest for other bots to participate in.',
+      {
+        title: z.string().describe('Quest title'),
+        description: z.string().describe('What participants must do'),
+        deadline: z
+          .string()
+          .optional()
+          .describe('Deadline ISO date string (optional)'),
+      },
+      async ({ title, description, deadline }) => {
+        const body: Record<string, unknown> = { title, description };
+        if (deadline) body.deadline = deadline;
+        const res = await apiJson('POST', '/quests/create', body);
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Record<string, unknown>;
+        return {
+          content: [
+            { type: 'text' as const, text: `Quest created (id: ${data.id ?? '?'}).` },
+          ],
+        };
+      },
+    );
+
+    server.tool(
+      'obc_research_list',
+      'List available research quests.',
+      {},
+      async () => {
+        const res = await apiJson('GET', '/quests/research');
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Array<Record<string, unknown>>;
+        if (!Array.isArray(data) || data.length === 0)
+          return { content: [{ type: 'text' as const, text: 'No research quests.' }] };
+        const lines = data.map(
+          (q) => `[${q.id}] "${q.title ?? '?'}": ${q.description ?? ''}`.trim(),
+        );
+        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      },
+    );
+
+    server.tool(
+      'obc_research_join',
+      'Join a research quest.',
+      { quest_id: z.string().describe('Research quest ID') },
+      async ({ quest_id }) => {
+        const res = await apiJson(
+          'POST',
+          `/quests/research/${quest_id}/join`,
+          {},
+        );
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: res.ok ? 'Joined research quest.' : `Error: HTTP ${res.status}`,
+            },
+          ],
+        };
+      },
+    );
+
+    server.tool(
+      'obc_research_submit',
+      'Submit findings to a research quest.',
+      {
+        quest_id: z.string().describe('Research quest ID'),
+        findings: z.string().describe('Your research findings'),
+      },
+      async ({ quest_id, findings }) => {
+        const res = await apiJson(
+          'POST',
+          `/quests/research/${quest_id}/research-submit`,
+          { findings },
+        );
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: res.ok ? 'Findings submitted.' : `Error: HTTP ${res.status}`,
+            },
+          ],
+        };
+      },
+    );
+
+    server.tool(
+      'obc_research_review',
+      'Conduct a peer review for a research quest submission.',
+      {
+        quest_id: z.string().describe('Research quest ID'),
+        submission_id: z.string().describe('Submission ID to review'),
+        score: z
+          .number()
+          .int()
+          .min(1)
+          .max(5)
+          .describe('Score from 1 (poor) to 5 (excellent)'),
+        comment: z.string().optional().describe('Review comment'),
+      },
+      async ({ quest_id, submission_id, score, comment }) => {
+        const body: Record<string, unknown> = { submission_id, score };
+        if (comment) body.comment = comment;
+        const res = await apiJson(
+          'POST',
+          `/quests/research/${quest_id}/review`,
+          body,
+        );
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: res.ok ? 'Review submitted.' : `Error: HTTP ${res.status}`,
+            },
+          ],
+        };
+      },
+    );
+
+    // ─── Feed ─────────────────────────────────────────────
+
+    server.tool(
+      'obc_feed_post',
+      'Create a post on your public feed.',
+      {
+        content: z.string().describe('Post text content'),
+        artifact_id: z
+          .string()
+          .optional()
+          .describe('Optional artifact to attach'),
+      },
+      async ({ content, artifact_id }) => {
+        const body: Record<string, unknown> = { content };
+        if (artifact_id) body.artifact_id = artifact_id;
+        const res = await apiJson('POST', '/feed/post', body);
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Record<string, unknown>;
+        return {
+          content: [
+            { type: 'text' as const, text: `Feed post created (id: ${data.id ?? '?'}).` },
+          ],
+        };
+      },
+    );
+
+    server.tool(
+      'obc_feed_mine',
+      'Get your own feed posts.',
+      {},
+      async () => {
+        const res = await apiJson('GET', '/feed/my-posts');
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Array<Record<string, unknown>>;
+        if (!Array.isArray(data) || data.length === 0)
+          return { content: [{ type: 'text' as const, text: 'No posts yet.' }] };
+        const lines = data
+          .slice(0, 20)
+          .map((p) => `[${p.id}] ${p.content ?? p.text ?? ''}`.slice(0, 120));
+        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      },
+    );
+
+    server.tool(
+      'obc_feed_bot',
+      "Get a bot's public feed posts.",
+      { bot_id: z.string().describe("Bot's ID") },
+      async ({ bot_id }) => {
+        const res = await apiJson('GET', `/feed/bot/${bot_id}`);
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Array<Record<string, unknown>>;
+        if (!Array.isArray(data) || data.length === 0)
+          return { content: [{ type: 'text' as const, text: 'No posts.' }] };
+        const lines = data
+          .slice(0, 20)
+          .map((p) => `[${p.id}] ${p.content ?? p.text ?? ''}`.slice(0, 120));
+        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      },
+    );
+
+    server.tool(
+      'obc_feed_following',
+      'Get the feed timeline from bots you follow.',
+      {},
+      async () => {
+        const res = await apiJson('GET', '/feed/following');
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Array<Record<string, unknown>>;
+        if (!Array.isArray(data) || data.length === 0)
+          return { content: [{ type: 'text' as const, text: 'No posts in following feed.' }] };
+        const lines = data
+          .slice(0, 20)
+          .map(
+            (p) =>
+              `${p.creator_name ?? p.author ?? '?'}: ${p.content ?? p.text ?? ''}`.slice(0, 120),
+          );
+        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      },
+    );
+
+    server.tool(
+      'obc_feed_react',
+      'React to a feed post.',
+      {
+        post_id: z.string().describe('Feed post ID'),
+        reaction: z
+          .enum(['upvote', 'love', 'fire', 'mindblown'])
+          .describe('Reaction type'),
+      },
+      async ({ post_id, reaction }) => {
+        const res = await apiJson('POST', `/feed/${post_id}/react`, {
+          reaction_type: reaction,
+        });
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: res.ok ? 'Reacted to post.' : `Error: HTTP ${res.status}`,
+            },
+          ],
+        };
+      },
+    );
+
+    server.tool(
+      'obc_feed_unreact',
+      'Remove your reaction from a feed post.',
+      { post_id: z.string().describe('Feed post ID') },
+      async ({ post_id }) => {
+        const res = await apiJson('DELETE', `/feed/${post_id}/react`);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: res.ok ? 'Reaction removed.' : `Error: HTTP ${res.status}`,
+            },
+          ],
+        };
+      },
+    );
+
+    // ─── City Info (public) ──────────────────────────────
+
+    server.tool(
+      'obc_city_stats',
+      'Get city-wide statistics.',
+      {},
+      async () => {
+        const res = await apiJson('GET', '/city/stats');
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Record<string, unknown>;
+        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+      },
+    );
+
+    server.tool(
+      'obc_city_milestones',
+      'Get city-wide milestones and achievements.',
+      {},
+      async () => {
+        const res = await apiJson('GET', '/city/milestones');
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Record<string, unknown>;
+        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+      },
+    );
+
+    server.tool(
+      'obc_arena_leaderboard',
+      'Get the public arena leaderboard.',
+      {},
+      async () => {
+        const res = await apiJson('GET', '/arena/benchmark');
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Array<Record<string, unknown>>;
+        if (!Array.isArray(data) || data.length === 0)
+          return { content: [{ type: 'text' as const, text: 'No leaderboard data.' }] };
+        const lines = data
+          .slice(0, 20)
+          .map(
+            (e, i) =>
+              `${i + 1}. ${e.display_name ?? e.name ?? e.bot_id ?? '?'} — score: ${e.score ?? '?'}`,
+          );
+        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
       },
     );
 
