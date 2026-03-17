@@ -494,7 +494,7 @@ async function runQuery(
         'NotebookEdit',
         'mcp__nanoclaw__*',
         ...Object.keys(mcpServerMap).map((name) => `mcp__${name}__*`),
-        'mcp__ollama__*',
+        ...(process.env.OLLAMA_ENABLED === '1' ? ['mcp__ollama__*'] : []),
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
@@ -511,10 +511,23 @@ async function runQuery(
           },
         },
         ...mcpServerMap,
-        ollama: {
-          command: 'node',
-          args: [path.join(path.dirname(mcpServerPath), 'ollama-mcp-stdio.js')],
-        },
+        ...(process.env.OLLAMA_ENABLED === '1' ? {
+          ollama: {
+            command: 'node',
+            args: [path.join(path.dirname(mcpServerPath), 'ollama-mcp-stdio.js')],
+            env: {
+              OLLAMA_HOST: process.env.OLLAMA_HOST
+                || (() => {
+                  const base = process.env.ANTHROPIC_BASE_URL;
+                  if (base) {
+                    const u = new URL(base);
+                    return `${u.protocol}//${u.host}/ollama`;
+                  }
+                  return 'http://host.docker.internal:3001/ollama';
+                })(),
+            },
+          },
+        } : {}),
       },
       hooks: {
         PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],

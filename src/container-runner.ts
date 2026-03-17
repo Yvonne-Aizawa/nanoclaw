@@ -208,7 +208,7 @@ function buildVolumeMounts(
 
   // Playwright shared directory: same path in both playwright and agent containers
   // so playwright can write screenshots/files that the agent can read.
-  const { browser } = loadAppConfig();
+  const { browser } = loadAppConfig().tools ?? {};
   if (browser?.enabled) {
     const sharedDir = path.join(DATA_DIR, 'playwright-shared');
     fs.mkdirSync(sharedDir, { recursive: true });
@@ -251,11 +251,19 @@ function buildContainerArgs(
   // Pass all active MCP server URLs as a JSON array.
   // Secrets stay inside the MCP containers — the agent only gets local URLs.
   // Only servers allowed for this group (by the `groups` restriction field) are included.
-  void loadAppConfig(); // ensure config is loaded (side-effect: caches it)
+  const appConfig = loadAppConfig();
   const mcpServers = getMcpServerUrls(groupFolder);
   if (mcpServers.length > 0) {
     args.push('-e', `MCP_SERVERS=${JSON.stringify(mcpServers)}`);
   }
+
+  // Ollama: pass enabled flag so the agent runner can conditionally register the MCP server.
+  // Groups restriction is checked here on the host side.
+  const ollamaConfig = appConfig.tools?.ollama;
+  const ollamaEnabled =
+    ollamaConfig?.enabled === true &&
+    (!ollamaConfig.groups || ollamaConfig.groups.includes(groupFolder));
+  args.push('-e', `OLLAMA_ENABLED=${ollamaEnabled ? '1' : '0'}`);
 
   // Mirror the host's auth method with a placeholder value.
   // API key mode: SDK sends x-api-key, proxy replaces with real key.

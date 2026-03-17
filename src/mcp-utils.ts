@@ -55,11 +55,20 @@ export function createUtilsHandler(): InProcessMcpHandler {
       {
         chat_jid: z.string().describe('The chat JID (e.g. tg:123456789)'),
         message_id: z.string().describe('The message ID to react to'),
-        emoji: z.string().describe('The emoji to react with, or empty string to remove'),
-        group_folder: z.string().describe('Your group folder name (used to route the IPC message)'),
+        emoji: z
+          .string()
+          .describe('The emoji to react with, or empty string to remove'),
+        group_folder: z
+          .string()
+          .describe('Your group folder name (used to route the IPC message)'),
       },
       async ({ chat_jid, message_id, emoji, group_folder }) => {
-        const messagesDir = path.join(DATA_DIR, 'ipc', group_folder, 'messages');
+        const messagesDir = path.join(
+          DATA_DIR,
+          'ipc',
+          group_folder,
+          'messages',
+        );
         fs.mkdirSync(messagesDir, { recursive: true });
         const payload = JSON.stringify({
           type: 'react',
@@ -67,7 +76,10 @@ export function createUtilsHandler(): InProcessMcpHandler {
           messageId: message_id,
           emoji,
         });
-        const file = path.join(messagesDir, `react-${Date.now()}-${randomUUID()}.json`);
+        const file = path.join(
+          messagesDir,
+          `react-${Date.now()}-${randomUUID()}.json`,
+        );
         fs.writeFileSync(file, payload);
         return {
           content: [

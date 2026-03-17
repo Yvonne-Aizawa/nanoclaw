@@ -30,31 +30,73 @@
         }
       }
     },
-    "brave": {
+    "tools": {
       "type": "object",
       "additionalProperties": false,
+      "description": "Tool integrations available to agents",
       "properties": {
-        "enabled": { "type": "boolean" },
-        "token": { "type": "string" },
-        "groups": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Restrict brave search to these groups. Omit to allow all groups."
-        }
-      }
-    },
-    "caldav": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "url": { "type": "string" },
-        "username": { "type": "string" },
-        "password": { "type": "string" },
-        "groups": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Restrict CalDAV to these groups. Omit to allow all groups."
+        "brave": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "token": { "type": "string" },
+            "groups": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Restrict brave search to these groups. Omit to allow all groups."
+            }
+          }
+        },
+        "caldav": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "url": { "type": "string" },
+            "username": { "type": "string" },
+            "password": { "type": "string" },
+            "groups": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Restrict CalDAV to these groups. Omit to allow all groups."
+            }
+          }
+        },
+        "browser": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Start a Playwright MCP container for browser automation"
+            },
+            "port": {
+              "type": "integer",
+              "minimum": 1024,
+              "maximum": 65535,
+              "description": "Host port for the Playwright MCP container. Defaults to 7703."
+            },
+            "memory": {
+              "type": "string",
+              "description": "Memory limit. Defaults to \"1g\"."
+            }
+          }
+        },
+        "ollama": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable local Ollama model access for agents"
+            },
+            "groups": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Restrict Ollama to these groups. Omit to allow all groups."
+            }
+          }
         }
       }
     },
@@ -94,26 +136,6 @@
         }
       }
     },
-    "browser": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "enabled": {
-          "type": "boolean",
-          "description": "Start a Playwright MCP container for browser automation"
-        },
-        "port": {
-          "type": "integer",
-          "minimum": 1024,
-          "maximum": 65535,
-          "description": "Host port for the Playwright MCP container. Defaults to 7703."
-        },
-        "memory": {
-          "type": "string",
-          "description": "Memory limit. Defaults to \"1g\"."
-        }
-      }
-    }
   },
   "$defs": {
     "aiEndpoint": {

@@ -22,11 +22,20 @@ segments, _ = model.transcribe(sys.argv[4], beam_size=5)
 print(' '.join(s.text.strip() for s in segments))
 `.trim();
 
-export async function transcribeAudio(filePath: string): Promise<string | null> {
+export async function transcribeAudio(
+  filePath: string,
+): Promise<string | null> {
   try {
     const { stdout } = await execFileAsync(
       'python3',
-      ['-c', PYTHON_SCRIPT, WHISPER_MODEL, WHISPER_DEVICE, WHISPER_COMPUTE, filePath],
+      [
+        '-c',
+        PYTHON_SCRIPT,
+        WHISPER_MODEL,
+        WHISPER_DEVICE,
+        WHISPER_COMPUTE,
+        filePath,
+      ],
       { timeout: 60000 },
     );
     const transcript = stdout.trim();

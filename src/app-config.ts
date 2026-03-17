@@ -83,19 +83,42 @@ export interface AppConfig {
     main_bot_token: string;
     bot_swarm_tokens: string[];
   };
-  brave: {
-    enabled: boolean;
-    token: string;
-    /** Restrict brave search to these groups. Omit to allow all groups. */
-    groups?: string[];
-  };
-  caldav: {
-    enabled: boolean;
-    url: string;
-    username: string;
-    password: string;
-    /** Restrict CalDAV to these groups. Omit to allow all groups. */
-    groups?: string[];
+  /** Grouped tool integrations. */
+  tools?: {
+    brave?: {
+      enabled: boolean;
+      token: string;
+      /** Restrict brave search to these groups. Omit to allow all groups. */
+      groups?: string[];
+    };
+    caldav?: {
+      enabled: boolean;
+      url: string;
+      username: string;
+      password: string;
+      /** Restrict CalDAV to these groups. Omit to allow all groups. */
+      groups?: string[];
+    };
+    /**
+     * Browser automation via @playwright/mcp in a dedicated container.
+     * When enabled, the agent can control a browser via MCP tools.
+     */
+    browser?: {
+      enabled: boolean;
+      /** Host port for the Playwright MCP container. Defaults to 7703. */
+      port?: number;
+      /** Memory limit. Defaults to "1g" (browsers are memory-hungry). */
+      memory?: string;
+    };
+    /**
+     * Ollama integration. Disabled by default.
+     * When enabled, agents can call local Ollama models via ollama_generate / ollama_list_models.
+     */
+    ollama?: {
+      enabled: boolean;
+      /** Restrict Ollama to these groups. Omit to allow all groups. */
+      groups?: string[];
+    };
   };
   /** Additional MCP servers to sandbox in containers. */
   mcp?: {
@@ -105,17 +128,6 @@ export interface AppConfig {
      * host.docker.internal:<routerPort>/<name>/mcp. Defaults to 7700.
      */
     routerPort?: number;
-  };
-  /**
-   * Browser automation via @playwright/mcp in a dedicated container.
-   * When enabled, the agent can control a browser via MCP tools.
-   */
-  browser?: {
-    enabled: boolean;
-    /** Host port for the Playwright MCP container. Defaults to 7703. */
-    port?: number;
-    /** Memory limit. Defaults to "1g" (browsers are memory-hungry). */
-    memory?: string;
   };
   /**
    * Vision (image) support. Enabled by default.
@@ -191,8 +203,6 @@ export function loadAppConfig(): AppConfig {
         token: { key: '' },
       },
       telegram: { main_bot_token: '', bot_swarm_tokens: [] },
-      brave: { enabled: false, token: '' },
-      caldav: { enabled: false, url: '', username: '', password: '' },
     };
     return _config;
   }

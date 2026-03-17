@@ -119,7 +119,8 @@ function expandMountHome(mount: string): string {
 }
 
 function buildContainerSpecs(): McpContainerSpec[] {
-  const { brave, caldav, browser, mcp } = loadAppConfig();
+  const { tools, mcp } = loadAppConfig();
+  const { browser } = tools ?? {};
   const specs: McpContainerSpec[] = [];
 
   if (browser?.enabled) {
@@ -335,7 +336,8 @@ async function proxyRequest(
 }
 
 function buildRouteMap(): Map<string, McpRoute> {
-  const { browser, mcp } = loadAppConfig();
+  const { tools, mcp } = loadAppConfig();
+  const { browser } = tools ?? {};
   const routes = new Map<string, McpRoute>();
 
   if (browser?.enabled) {
@@ -417,12 +419,13 @@ export function stopMcpRouter(): void {
 }
 
 function startInProcessMcpServers(): void {
-  const { brave, caldav } = loadAppConfig();
-  if (brave.enabled && brave.token) {
+  const { tools } = loadAppConfig();
+  const { brave, caldav } = tools ?? {};
+  if (brave?.enabled && brave.token) {
     inProcessHandlers.set('brave', createBraveHandler(brave.token));
     logger.info('Brave MCP server started in-process');
   }
-  if (caldav.enabled && caldav.url) {
+  if (caldav?.enabled && caldav.url) {
     inProcessHandlers.set(
       'caldav',
       createCalDavHandler({
@@ -499,7 +502,8 @@ export function getMcpServerUrls(groupFolder?: string): Array<{
   url: string;
   mounts?: McpMount[];
 }> {
-  const { brave, caldav, browser, mcp } = loadAppConfig();
+  const { tools, mcp } = loadAppConfig();
+  const { brave, caldav, browser } = tools ?? {};
   const routerPort = mcp?.routerPort ?? 7700;
   const base = `http://${CONTAINER_HOST_GATEWAY}:${routerPort}`;
   const servers: Array<{ name: string; url: string; mounts?: McpMount[] }> = [];
@@ -518,10 +522,10 @@ export function getMcpServerUrls(groupFolder?: string): Array<{
       mounts: [{ containerPath: '/shared', readonly: false }],
     });
   }
-  if (brave.enabled && brave.token && allowed(brave.groups)) {
+  if (brave?.enabled && brave.token && allowed(brave.groups)) {
     servers.push({ name: 'brave', url: `${base}/brave/mcp` });
   }
-  if (caldav.enabled && caldav.url && allowed(caldav.groups)) {
+  if (caldav?.enabled && caldav.url && allowed(caldav.groups)) {
     servers.push({ name: 'caldav', url: `${base}/caldav/mcp` });
   }
   for (const srv of mcp?.servers ?? []) {

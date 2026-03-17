@@ -367,7 +367,13 @@ export class TelegramChannel implements Channel {
       const isGroup =
         ctx.chat.type === 'group' || ctx.chat.type === 'supergroup';
 
-      this.opts.onChatMetadata(chatJid, timestamp, undefined, 'telegram', isGroup);
+      this.opts.onChatMetadata(
+        chatJid,
+        timestamp,
+        undefined,
+        'telegram',
+        isGroup,
+      );
 
       let content = '[Voice message]';
       if (voice?.file_id) {
@@ -377,10 +383,20 @@ export class TelegramChannel implements Channel {
             const fileUrl = `https://api.telegram.org/file/bot${this.botToken}/${file.file_path}`;
             const response = await fetch(fileUrl);
             if (response.ok) {
-              const attachmentsDir = path.join(GROUPS_DIR, group.folder, 'attachments');
+              const attachmentsDir = path.join(
+                GROUPS_DIR,
+                group.folder,
+                'attachments',
+              );
               fs.mkdirSync(attachmentsDir, { recursive: true });
-              const oggPath = path.join(attachmentsDir, `voice_${ctx.message.message_id}.ogg`);
-              fs.writeFileSync(oggPath, Buffer.from(await response.arrayBuffer()));
+              const oggPath = path.join(
+                attachmentsDir,
+                `voice_${ctx.message.message_id}.ogg`,
+              );
+              fs.writeFileSync(
+                oggPath,
+                Buffer.from(await response.arrayBuffer()),
+              );
 
               const transcript = await transcribeAudio(oggPath);
               if (transcript) {

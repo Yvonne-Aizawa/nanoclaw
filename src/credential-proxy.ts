@@ -39,6 +39,30 @@ export function startCredentialProxy(
 
   return new Promise((resolve, reject) => {
     const server = createServer((req, res) => {
+      // Ollama proxy: forward /ollama/* to localhost:11434/*
+      if (req.url?.startsWith('/ollama/')) {
+        const ollamaPath = req.url.slice('/ollama'.length);
+        const upstream = httpRequest(
+          {
+            hostname: '127.0.0.1',
+            port: 11434,
+            path: ollamaPath,
+            method: req.method,
+            headers: { ...req.headers, host: '127.0.0.1:11434' },
+          } as RequestOptions,
+          (upRes) => {
+            res.writeHead(upRes.statusCode!, upRes.headers);
+            upRes.pipe(res);
+          },
+        );
+        upstream.on('error', (err) => {
+          logger.error({ err, url: req.url }, 'Ollama proxy error');
+          if (!res.headersSent) { res.writeHead(502); res.end('Bad Gateway'); }
+        });
+        req.pipe(upstream);
+        return;
+      }
+
       const chunks: Buffer[] = [];
       req.on('data', (c) => chunks.push(c));
       req.on('end', () => {
