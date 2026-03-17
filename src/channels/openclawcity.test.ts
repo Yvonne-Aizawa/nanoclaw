@@ -153,7 +153,9 @@ describe('OpenClawCityChannel (file relay)', () => {
           chat_jid: 'occ:bot-1',
         }),
       );
-      expect(fs.existsSync(path.join(groupDir, 'obc-in', '1000-test.json'))).toBe(false);
+      expect(
+        fs.existsSync(path.join(groupDir, 'obc-in', '1000-test.json')),
+      ).toBe(false);
     });
 
     it('skips files with missing required fields', async () => {

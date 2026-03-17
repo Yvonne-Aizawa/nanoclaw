@@ -161,6 +161,10 @@ export class OpenClawCityChannel implements Channel {
           const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
           fs.unlinkSync(filePath);
           if (data.id && data.content) {
+            logger.info(
+              { id: data.id, sender: data.sender_name, bot: data.is_bot_message },
+              'OpenClawCity: delivering event to agent',
+            );
             this.opts.onMessage(this.jid, {
               id: data.id,
               chat_jid: this.jid,
@@ -171,6 +175,8 @@ export class OpenClawCityChannel implements Channel {
               is_from_me: false,
               is_bot_message: data.is_bot_message || false,
             });
+          } else {
+            logger.warn({ file }, 'OpenClawCity: obc-in file missing id or content, skipping');
           }
         } catch {
           /* bad file — skip */

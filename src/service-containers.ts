@@ -14,7 +14,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { loadAppConfig } from './app-config.js';
-import { CREDENTIAL_PROXY_PORT, DATA_DIR, GROUPS_DIR } from './config.js';
+import { CREDENTIAL_PROXY_PORT, DATA_DIR, GROUPS_DIR, WORKSPACE_DIR } from './config.js';
 import {
   CONTAINER_HOST_GATEWAY,
   CONTAINER_RUNTIME_BIN,
@@ -54,6 +54,10 @@ function startServiceContainer(
   const ipcInputDir = path.join(DATA_DIR, 'ipc', groupFolder, 'input');
   fs.mkdirSync(ipcInputDir, { recursive: true });
 
+  // Secrets dir lives outside the group folder so agent containers can't read it
+  const secretsDir = path.join(WORKSPACE_DIR, 'secrets', groupFolder);
+  fs.mkdirSync(secretsDir, { recursive: true });
+
   const args = [
     'run',
     '-d',
@@ -70,6 +74,8 @@ function startServiceContainer(
     memory,
     '-v',
     `${path.join(GROUPS_DIR, groupFolder)}:/workspace/group`,
+    '-v',
+    `${secretsDir}:/workspace/secrets:ro`,
     '-v',
     `${ipcInputDir}:/workspace/ipc/input`,
     '-e',
@@ -124,10 +130,7 @@ export function startServiceContainers(
     try {
       startServiceContainer(folder, image, memory, cpus);
     } catch (err) {
-      logger.error(
-        { err, folder },
-        'Failed to start service container',
-      );
+      logger.error({ err, folder }, 'Failed to start service container');
     }
   }
 }
