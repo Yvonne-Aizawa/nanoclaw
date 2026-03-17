@@ -2,7 +2,7 @@
 
 Each group has an isolated Kanban board. Use these tools to manage tasks visually across columns (e.g. To Do → In Progress → Done).
 
-Your `group_folder` is always your own group's folder name. Never use another group's folder.
+Your `group_folder` is always your own group's folder name — read it from the `NANOCLAW_GROUP_FOLDER` environment variable (`$NANOCLAW_GROUP_FOLDER` in bash, or `process.env.NANOCLAW_GROUP_FOLDER` in JS). Never use another group's folder.
 
 ## Tools
 

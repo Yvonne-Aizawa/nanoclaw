@@ -242,6 +242,9 @@ function buildContainerArgs(
   // Pass host timezone so container's local time matches the user's
   args.push('-e', `TZ=${TIMEZONE}`);
 
+  // Tell the agent its own group folder so tools like kanban know which scope to use.
+  args.push('-e', `NANOCLAW_GROUP_FOLDER=${groupFolder}`);
+
   // Route API traffic through the credential proxy (containers never see real secrets)
   args.push(
     '-e',
