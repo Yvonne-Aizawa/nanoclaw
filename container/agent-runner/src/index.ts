@@ -494,6 +494,7 @@ async function runQuery(
         'NotebookEdit',
         'mcp__nanoclaw__*',
         ...Object.keys(mcpServerMap).map((name) => `mcp__${name}__*`),
+        'mcp__ollama__*',
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
@@ -510,6 +511,10 @@ async function runQuery(
           },
         },
         ...mcpServerMap,
+        ollama: {
+          command: 'node',
+          args: [path.join(path.dirname(mcpServerPath), 'ollama-mcp-stdio.js')],
+        },
       },
       hooks: {
         PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],

@@ -420,7 +420,7 @@ export async function runContainerAgent(
       const lines = chunk.trim().split('\n');
       for (const line of lines) {
         if (!line) continue;
-        if (line.startsWith('[caldav]')) {
+        if (line.startsWith('[caldav]') || line.includes('[OLLAMA]')) {
           logger.info({ container: group.folder }, line);
         } else {
           logger.debug({ container: group.folder }, line);
