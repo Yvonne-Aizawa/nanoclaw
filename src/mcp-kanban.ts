@@ -215,7 +215,9 @@ export function createKanbanHandler(groupFolder: string): InProcessMcpHandler {
       'Mark card A as depending on (blocked by) card B. Card A cannot be considered ready until card B is done.',
       {
         card_id: z.string().describe('Card ID that depends on another card'),
-        depends_on_id: z.string().describe('Card ID that must be completed first'),
+        depends_on_id: z
+          .string()
+          .describe('Card ID that must be completed first'),
       },
       async ({ card_id, depends_on_id }) => {
         addKanbanCardDep(card_id, depends_on_id, groupFolder);

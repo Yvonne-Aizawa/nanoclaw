@@ -176,6 +176,15 @@ export interface AppConfig {
     intervalMs?: number;
   };
   /**
+   * Per-group overrides. Keyed by group folder name.
+   */
+  group?: Record<string, {
+    heartbeat?: {
+      /** Override the global heartbeat interval for this group (ms). */
+      intervalMs?: number;
+    };
+  }>;
+  /**
    * Agent run limits. Controls how long a container agent is allowed to run.
    */
   agent?: {

@@ -11,7 +11,7 @@ import path from 'path';
 
 import { loadAppConfig } from './app-config.js';
 import { GROUPS_DIR } from './config.js';
-import { createTask, deleteTask, getTaskById } from './db.js';
+import { createTask, deleteTask, getTaskById, updateTask } from './db.js';
 import { logger } from './logger.js';
 import { RegisteredGroup } from './types.js';
 
@@ -54,9 +54,12 @@ function nextAlignedRun(intervalMs: number): Date {
 export function syncHeartbeatTasks(
   groups: Record<string, RegisteredGroup>,
 ): void {
-  const intervalMs = loadAppConfig().heartbeat?.intervalMs ?? 30 * 60 * 1000;
+  const config = loadAppConfig();
+  const globalIntervalMs = config.heartbeat?.intervalMs ?? 30 * 60 * 1000;
 
   for (const [jid, group] of Object.entries(groups)) {
+    const intervalMs =
+      config.group?.[group.folder]?.heartbeat?.intervalMs ?? globalIntervalMs;
     const taskId = `${HEARTBEAT_TASK_PREFIX}${group.folder}`;
     const hasFile = fs.existsSync(heartbeatFilePath(group.folder));
     const existing = getTaskById(taskId);
@@ -84,6 +87,16 @@ export function syncHeartbeatTasks(
       logger.info(
         { folder: group.folder },
         'Heartbeat task removed (heartbeat.md deleted)',
+      );
+    } else if (hasFile && existing && existing.schedule_value !== String(intervalMs)) {
+      // Interval changed — update schedule and re-align next run
+      updateTask(taskId, {
+        schedule_value: String(intervalMs),
+        next_run: nextAlignedRun(intervalMs).toISOString(),
+      });
+      logger.info(
+        { folder: group.folder, intervalMs },
+        'Heartbeat interval updated',
       );
     }
   }

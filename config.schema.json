@@ -136,17 +136,50 @@
         }
       }
     },
+    "group": {
+      "type": "object",
+      "description": "Per-group overrides, keyed by group folder name",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "heartbeat": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "intervalMs": {
+                "type": "integer",
+                "minimum": 60000,
+                "description": "Override the global heartbeat interval for this group (ms)"
+              }
+            }
+          }
+        }
+      }
+    }
   },
   "$defs": {
     "aiEndpoint": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "endpoint": { "type": "string", "description": "Custom API endpoint URL" },
+        "endpoint": {
+          "type": "string",
+          "description": "Custom API endpoint URL"
+        },
         "key": { "type": "string" },
-        "model": { "type": "string", "description": "Default model ID override (used when chatModel/cronModel are not set)" },
-        "chatModel": { "type": "string", "description": "Model for chat messages and heartbeat runs. Falls back to model." },
-        "cronModel": { "type": "string", "description": "Model for scheduled cron tasks created by agents. Falls back to model." }
+        "model": {
+          "type": "string",
+          "description": "Default model ID override (used when chatModel/cronModel are not set)"
+        },
+        "chatModel": {
+          "type": "string",
+          "description": "Model for chat messages and heartbeat runs. Falls back to model."
+        },
+        "cronModel": {
+          "type": "string",
+          "description": "Model for scheduled cron tasks created by agents. Falls back to model."
+        }
       }
     },
     "mcpResourceLimits": {
@@ -184,11 +217,20 @@
       "required": ["name", "type", "package", "port"],
       "additionalProperties": false,
       "properties": {
-        "name": { "type": "string", "description": "Unique container name suffix" },
+        "name": {
+          "type": "string",
+          "description": "Unique container name suffix"
+        },
         "type": { "type": "string", "const": "npx" },
-        "package": { "type": "string", "description": "npm package to run via npx" },
+        "package": {
+          "type": "string",
+          "description": "npm package to run via npx"
+        },
         "port": { "type": "integer", "minimum": 1024, "maximum": 65535 },
-        "env": { "type": "object", "additionalProperties": { "type": "string" } },
+        "env": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
         "args": {
           "type": "array",
           "items": { "type": "string" },
@@ -206,11 +248,20 @@
       "required": ["name", "type", "package", "port"],
       "additionalProperties": false,
       "properties": {
-        "name": { "type": "string", "description": "Unique container name suffix" },
+        "name": {
+          "type": "string",
+          "description": "Unique container name suffix"
+        },
         "type": { "type": "string", "const": "uvx" },
-        "package": { "type": "string", "description": "Python package to run via uvx" },
+        "package": {
+          "type": "string",
+          "description": "Python package to run via uvx"
+        },
         "port": { "type": "integer", "minimum": 1024, "maximum": 65535 },
-        "env": { "type": "object", "additionalProperties": { "type": "string" } },
+        "env": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
         "args": {
           "type": "array",
           "items": { "type": "string" },
@@ -228,9 +279,16 @@
       "required": ["name", "type", "url", "port"],
       "additionalProperties": false,
       "properties": {
-        "name": { "type": "string", "description": "Unique container name suffix" },
+        "name": {
+          "type": "string",
+          "description": "Unique container name suffix"
+        },
         "type": { "type": "string", "const": "remote" },
-        "url": { "type": "string", "format": "uri", "description": "Upstream MCP server URL" },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Upstream MCP server URL"
+        },
         "port": { "type": "integer", "minimum": 1024, "maximum": 65535 },
         "headers": {
           "type": "object",
