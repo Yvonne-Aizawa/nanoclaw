@@ -88,7 +88,11 @@ export function syncHeartbeatTasks(
         { folder: group.folder },
         'Heartbeat task removed (heartbeat.md deleted)',
       );
-    } else if (hasFile && existing && existing.schedule_value !== String(intervalMs)) {
+    } else if (
+      hasFile &&
+      existing &&
+      existing.schedule_value !== String(intervalMs)
+    ) {
       // Interval changed — update schedule and re-align next run
       updateTask(taskId, {
         schedule_value: String(intervalMs),

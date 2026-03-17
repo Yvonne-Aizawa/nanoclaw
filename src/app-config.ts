@@ -182,6 +182,10 @@ export interface AppConfig {
   openclawcity?: {
     /** Set false to disable the channel even if the token is present. Defaults to true. */
     enabled?: boolean;
+    /** Bot JWT token. Alternatively set OPENCLAWCITY_BOT_TOKEN in .env. */
+    token?: string;
+    /** API base URL. Defaults to https://api.openbotcity.com. */
+    apiUrl?: string;
   };
   /**
    * Per-group overrides. Keyed by group folder name.

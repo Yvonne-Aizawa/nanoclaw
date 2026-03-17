@@ -88,20 +88,29 @@ function startServiceContainer(
 /**
  * Start service containers for all groups that have service.enabled = true
  * and a service/index.js file in their group folder.
+ *
+ * Checks both registered groups AND config groups so that service containers
+ * can start before their channel is activated (e.g. openclawcity needs the
+ * container running before the relay channel can discover the identity file).
  */
 export function startServiceContainers(
   groups: Record<string, RegisteredGroup>,
 ): void {
   const config = loadAppConfig();
 
-  for (const group of Object.values(groups)) {
-    const svcConfig = config.group?.[group.folder]?.service;
+  // Collect all folder names to check: registered groups + config group keys
+  const registeredFolders = new Set(Object.values(groups).map((g) => g.folder));
+  const configFolders = new Set(Object.keys(config.group ?? {}));
+  const allFolders = new Set([...registeredFolders, ...configFolders]);
+
+  for (const folder of allFolders) {
+    const svcConfig = config.group?.[folder]?.service;
     if (!svcConfig?.enabled) continue;
 
-    const entrypoint = serviceEntrypoint(group.folder);
+    const entrypoint = serviceEntrypoint(folder);
     if (!fs.existsSync(entrypoint)) {
       logger.info(
-        { folder: group.folder },
+        { folder },
         'Service container skipped — service/index.js not found',
       );
       continue;
@@ -111,12 +120,12 @@ export function startServiceContainers(
     const memory = svcConfig.memory ?? '256m';
     const cpus = svcConfig.cpus ?? 0.5;
 
-    stopAndRemoveService(group.folder);
+    stopAndRemoveService(folder);
     try {
-      startServiceContainer(group.folder, image, memory, cpus);
+      startServiceContainer(folder, image, memory, cpus);
     } catch (err) {
       logger.error(
-        { err, folder: group.folder },
+        { err, folder },
         'Failed to start service container',
       );
     }
