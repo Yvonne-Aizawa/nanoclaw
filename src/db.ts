@@ -192,6 +192,15 @@ function createSchema(database: Database.Database): void {
   } catch {
     /* tables already exist */
   }
+
+  // Add priority column to kanban_cards (migration for existing DBs)
+  try {
+    database.exec(
+      `ALTER TABLE kanban_cards ADD COLUMN priority TEXT CHECK(priority IN ('high','medium','low')) DEFAULT NULL`,
+    );
+  } catch {
+    /* column already exists */
+  }
 }
 
 export function initDatabase(): void {
@@ -743,6 +752,7 @@ export interface KanbanCard {
   column_id: string;
   title: string;
   description: string | null;
+  priority: 'high' | 'medium' | 'low' | null;
   position: number;
   created_at: string;
   updated_at: string;
@@ -765,13 +775,7 @@ export function getKanbanBoard(groupFolder: string): KanbanBoard {
       db.prepare(
         `INSERT INTO kanban_columns (id, group_folder, name, position, created_at)
          VALUES (?, ?, ?, ?, ?)`,
-      ).run(
-        `${groupFolder}-col-${i}`,
-        groupFolder,
-        DEFAULT_COLUMNS[i],
-        i,
-        now,
-      );
+      ).run(`${groupFolder}-col-${i}`, groupFolder, DEFAULT_COLUMNS[i], i, now);
     }
   }
 
@@ -789,7 +793,8 @@ export function getKanbanBoard(groupFolder: string): KanbanBoard {
 
   const cardsByColumn = new Map<string, KanbanCard[]>();
   for (const card of cards) {
-    if (!cardsByColumn.has(card.column_id)) cardsByColumn.set(card.column_id, []);
+    if (!cardsByColumn.has(card.column_id))
+      cardsByColumn.set(card.column_id, []);
     cardsByColumn.get(card.column_id)!.push(card);
   }
 
@@ -843,30 +848,37 @@ export function deleteKanbanColumn(
     .get(groupFolder, columnId) as { id: string } | undefined;
 
   if (firstOther) {
-    const maxPos = (
-      db
-        .prepare(
-          'SELECT MAX(position) as m FROM kanban_cards WHERE column_id = ?',
-        )
-        .get(firstOther.id) as { m: number | null }
-    ).m ?? -1;
+    const maxPos =
+      (
+        db
+          .prepare(
+            'SELECT MAX(position) as m FROM kanban_cards WHERE column_id = ?',
+          )
+          .get(firstOther.id) as { m: number | null }
+      ).m ?? -1;
     const cards = db
-      .prepare(`SELECT id FROM kanban_cards WHERE column_id = ? ORDER BY position`)
+      .prepare(
+        `SELECT id FROM kanban_cards WHERE column_id = ? ORDER BY position`,
+      )
       .all(columnId) as { id: string }[];
     for (let i = 0; i < cards.length; i++) {
       db.prepare(
         `UPDATE kanban_cards SET column_id = ?, position = ?, updated_at = ? WHERE id = ?`,
-      ).run(firstOther.id, maxPos + 1 + i, new Date().toISOString(), cards[i].id);
+      ).run(
+        firstOther.id,
+        maxPos + 1 + i,
+        new Date().toISOString(),
+        cards[i].id,
+      );
     }
   } else {
     // No other column — delete cards
     db.prepare(`DELETE FROM kanban_cards WHERE column_id = ?`).run(columnId);
   }
 
-  db.prepare(`DELETE FROM kanban_columns WHERE id = ? AND group_folder = ?`).run(
-    columnId,
-    groupFolder,
-  );
+  db.prepare(
+    `DELETE FROM kanban_columns WHERE id = ? AND group_folder = ?`,
+  ).run(columnId, groupFolder);
 }
 
 export function addKanbanCard(
@@ -874,25 +886,39 @@ export function addKanbanCard(
   columnId: string,
   title: string,
   description?: string,
+  priority?: 'high' | 'medium' | 'low',
 ): KanbanCard {
   const id = `card-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const maxPos = (
     db
-      .prepare('SELECT MAX(position) as m FROM kanban_cards WHERE column_id = ?')
+      .prepare(
+        'SELECT MAX(position) as m FROM kanban_cards WHERE column_id = ?',
+      )
       .get(columnId) as { m: number | null }
   ).m;
   const position = (maxPos ?? -1) + 1;
   const now = new Date().toISOString();
   db.prepare(
-    `INSERT INTO kanban_cards (id, group_folder, column_id, title, description, position, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, groupFolder, columnId, title, description ?? null, position, now, now);
+    `INSERT INTO kanban_cards (id, group_folder, column_id, title, description, priority, position, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    groupFolder,
+    columnId,
+    title,
+    description ?? null,
+    priority ?? null,
+    position,
+    now,
+    now,
+  );
   return {
     id,
     group_folder: groupFolder,
     column_id: columnId,
     title,
     description: description ?? null,
+    priority: priority ?? null,
     position,
     created_at: now,
     updated_at: now,
@@ -904,21 +930,20 @@ export function updateKanbanCard(
   groupFolder: string,
   title?: string,
   description?: string,
+  priority?: 'high' | 'medium' | 'low' | null,
 ): void {
   const now = new Date().toISOString();
-  if (title !== undefined && description !== undefined) {
-    db.prepare(
-      `UPDATE kanban_cards SET title = ?, description = ?, updated_at = ? WHERE id = ? AND group_folder = ?`,
-    ).run(title, description, now, cardId, groupFolder);
-  } else if (title !== undefined) {
-    db.prepare(
-      `UPDATE kanban_cards SET title = ?, updated_at = ? WHERE id = ? AND group_folder = ?`,
-    ).run(title, now, cardId, groupFolder);
-  } else if (description !== undefined) {
-    db.prepare(
-      `UPDATE kanban_cards SET description = ?, updated_at = ? WHERE id = ? AND group_folder = ?`,
-    ).run(description, now, cardId, groupFolder);
-  }
+  const fields: string[] = [];
+  const values: unknown[] = [];
+  if (title !== undefined) { fields.push('title = ?'); values.push(title); }
+  if (description !== undefined) { fields.push('description = ?'); values.push(description); }
+  if (priority !== undefined) { fields.push('priority = ?'); values.push(priority); }
+  if (fields.length === 0) return;
+  fields.push('updated_at = ?');
+  values.push(now, cardId, groupFolder);
+  db.prepare(
+    `UPDATE kanban_cards SET ${fields.join(', ')} WHERE id = ? AND group_folder = ?`,
+  ).run(...values);
 }
 
 export function moveKanbanCard(
@@ -931,7 +956,9 @@ export function moveKanbanCard(
   if (position === undefined) {
     const maxPos = (
       db
-        .prepare('SELECT MAX(position) as m FROM kanban_cards WHERE column_id = ?')
+        .prepare(
+          'SELECT MAX(position) as m FROM kanban_cards WHERE column_id = ?',
+        )
         .get(columnId) as { m: number | null }
     ).m;
     position = (maxPos ?? -1) + 1;
@@ -942,9 +969,10 @@ export function moveKanbanCard(
 }
 
 export function deleteKanbanCard(cardId: string, groupFolder: string): void {
-  db.prepare(
-    `DELETE FROM kanban_cards WHERE id = ? AND group_folder = ?`,
-  ).run(cardId, groupFolder);
+  db.prepare(`DELETE FROM kanban_cards WHERE id = ? AND group_folder = ?`).run(
+    cardId,
+    groupFolder,
+  );
 }
 
 // --- JSON migration ---

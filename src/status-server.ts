@@ -84,6 +84,11 @@ const HTML_PAGE = `<!DOCTYPE html>
     .card { background: #161b27; border: 1px solid #1e2535; border-radius: 8px; padding: 14px; }
     .badge { display: inline-block; font-size: 0.65rem; font-weight: 700; border-radius: 4px;
              padding: 2px 7px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .pri { display: inline-block; font-size: 0.6rem; font-weight: 700; border-radius: 3px;
+           padding: 1px 5px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 5px; }
+    .pri-high   { background: #2b0d0d; color: #f87171; }
+    .pri-medium { background: #2b1f0d; color: #fb923c; }
+    .pri-low    { background: #0d1f2b; color: #60a5fa; }
     .badge-active  { background: #0d2b1a; color: #34d399; }
     .badge-idle    { background: #2b2100; color: #fbbf24; }
     .badge-waiting { background: #1a1535; color: #818cf8; }
@@ -314,6 +319,15 @@ const KANBAN_PAGE = `<!DOCTYPE html>
         <label>Description (optional)</label>
         <textarea id="card-desc-inp" placeholder="Details…"></textarea>
       </div>
+      <div class="field">
+        <label>Priority</label>
+        <select id="card-pri-inp">
+          <option value="">— none —</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+      </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
         <button class="btn btn-primary" id="modal-save">Save</button>
@@ -437,6 +451,13 @@ const KANBAN_PAGE = `<!DOCTYPE html>
     div.dataset.cardId = card.id;
     div.dataset.colId = colId;
     div.dataset.idx = idx;
+
+    if (card.priority) {
+      const badge = document.createElement('span');
+      badge.className = 'pri pri-' + card.priority;
+      badge.textContent = card.priority;
+      div.appendChild(badge);
+    }
 
     const titleEl = document.createElement('div');
     titleEl.className = 'card-title';
@@ -574,6 +595,7 @@ const KANBAN_PAGE = `<!DOCTYPE html>
     document.getElementById('modal-title').textContent = 'Add card';
     document.getElementById('card-title-inp').value = '';
     document.getElementById('card-desc-inp').value = '';
+    document.getElementById('card-pri-inp').value = '';
     document.getElementById('card-modal').classList.remove('hidden');
     document.getElementById('card-title-inp').focus();
     document.getElementById('modal-save').onclick = saveCard;
@@ -584,6 +606,7 @@ const KANBAN_PAGE = `<!DOCTYPE html>
     document.getElementById('modal-title').textContent = 'Edit card';
     document.getElementById('card-title-inp').value = card.title;
     document.getElementById('card-desc-inp').value = card.description || '';
+    document.getElementById('card-pri-inp').value = card.priority || '';
     document.getElementById('card-modal').classList.remove('hidden');
     document.getElementById('card-title-inp').focus();
     document.getElementById('modal-save').onclick = saveCard;
@@ -597,15 +620,16 @@ const KANBAN_PAGE = `<!DOCTYPE html>
   async function saveCard() {
     const title = document.getElementById('card-title-inp').value.trim();
     const description = document.getElementById('card-desc-inp').value.trim() || undefined;
+    const priority = document.getElementById('card-pri-inp').value || null;
     if (!title) { document.getElementById('card-title-inp').focus(); return; }
 
     try {
       if (modalMode.mode === 'add') {
         await api('POST', '/api/kanban/' + encodeURIComponent(currentGroup) + '/cards',
-          { column_id: modalMode.colId, title, description });
+          { column_id: modalMode.colId, title, description, priority });
       } else {
         await api('PATCH', '/api/kanban/' + encodeURIComponent(currentGroup) + '/cards/' + encodeURIComponent(modalMode.card.id),
-          { title, description });
+          { title, description, priority });
       }
       closeModal();
       board = await api('GET', '/api/kanban/' + encodeURIComponent(currentGroup));
@@ -641,9 +665,15 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
     const chunks: Buffer[] = [];
     req.on('data', (c) => chunks.push(c as Buffer));
     req.on('end', () => {
-      if (chunks.length === 0) { resolve({}); return; }
-      try { resolve(JSON.parse(Buffer.concat(chunks).toString())); }
-      catch { reject(new Error('Invalid JSON')); }
+      if (chunks.length === 0) {
+        resolve({});
+        return;
+      }
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString()));
+      } catch {
+        reject(new Error('Invalid JSON'));
+      }
     });
     req.on('error', reject);
   });
@@ -651,7 +681,10 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
 
 function jsonOk(res: ServerResponse, data: unknown, status = 200): void {
   const body = JSON.stringify(data);
-  res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' });
+  res.writeHead(status, {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-cache',
+  });
   res.end(body);
 }
 
@@ -670,23 +703,35 @@ async function handleKanban(
   const method = req.method?.toUpperCase() ?? 'GET';
   const url = req.url ?? '';
   const m = url.match(KANBAN_RE);
-  if (!m) { jsonErr(res, 404, 'Not found'); return; }
+  if (!m) {
+    jsonErr(res, 404, 'Not found');
+    return;
+  }
 
   const group = m[1] ? decodeURIComponent(m[1]) : undefined;
   const rest = m[2] ?? '';
 
   // GET /api/kanban/groups
   if (!group) {
-    if (method !== 'GET') { jsonErr(res, 405, 'Method Not Allowed'); return; }
+    if (method !== 'GET') {
+      jsonErr(res, 405, 'Method Not Allowed');
+      return;
+    }
     const groups = getAllRegisteredGroups();
-    const list = Object.values(groups).map((g) => ({ folder: g.folder, name: g.name }));
+    const list = Object.values(groups).map((g) => ({
+      folder: g.folder,
+      name: g.name,
+    }));
     jsonOk(res, list);
     return;
   }
 
   // GET /api/kanban/:group  → full board
   if (!rest) {
-    if (method !== 'GET') { jsonErr(res, 405, 'Method Not Allowed'); return; }
+    if (method !== 'GET') {
+      jsonErr(res, 405, 'Method Not Allowed');
+      return;
+    }
     jsonOk(res, getKanbanBoard(group));
     return;
   }
@@ -695,11 +740,17 @@ async function handleKanban(
   const colMatch = rest.match(/^columns(?:\/([^/]+))?$/);
   if (colMatch) {
     const colId = colMatch[1] ? decodeURIComponent(colMatch[1]) : undefined;
-    const body = (method !== 'GET' && method !== 'DELETE') ? (await readBody(req) as Record<string, string>) : {};
+    const body =
+      method !== 'GET' && method !== 'DELETE'
+        ? ((await readBody(req)) as Record<string, string>)
+        : {};
 
     if (!colId) {
       // POST /columns
-      if (method !== 'POST') { jsonErr(res, 405, 'Method Not Allowed'); return; }
+      if (method !== 'POST') {
+        jsonErr(res, 405, 'Method Not Allowed');
+        return;
+      }
       const col = createKanbanColumn(group, String(body.name ?? ''));
       jsonOk(res, col, 201);
     } else if (method === 'PATCH') {
@@ -707,7 +758,8 @@ async function handleKanban(
       jsonOk(res, { ok: true });
     } else if (method === 'DELETE') {
       deleteKanbanColumn(colId, group);
-      res.writeHead(204); res.end();
+      res.writeHead(204);
+      res.end();
     } else {
       jsonErr(res, 405, 'Method Not Allowed');
     }
@@ -719,34 +771,56 @@ async function handleKanban(
   if (cardMatch) {
     const cardId = cardMatch[1] ? decodeURIComponent(cardMatch[1]) : undefined;
     const action = cardMatch[2];
-    const body = (method !== 'GET' && method !== 'DELETE') ? (await readBody(req) as Record<string, unknown>) : {};
+    const body =
+      method !== 'GET' && method !== 'DELETE'
+        ? ((await readBody(req)) as Record<string, unknown>)
+        : {};
 
     if (!cardId) {
       // POST /cards
-      if (method !== 'POST') { jsonErr(res, 405, 'Method Not Allowed'); return; }
+      if (method !== 'POST') {
+        jsonErr(res, 405, 'Method Not Allowed');
+        return;
+      }
+      const pri = ['high', 'medium', 'low'].includes(String(body.priority ?? ''))
+        ? (body.priority as 'high' | 'medium' | 'low')
+        : undefined;
       const card = addKanbanCard(
         group,
         String(body.column_id ?? ''),
         String(body.title ?? ''),
         body.description != null ? String(body.description) : undefined,
+        pri,
       );
       jsonOk(res, card, 201);
     } else if (action === 'move') {
       // POST /cards/:id/move
-      if (method !== 'POST') { jsonErr(res, 405, 'Method Not Allowed'); return; }
-      const position = body.position != null ? Number(body.position) : undefined;
+      if (method !== 'POST') {
+        jsonErr(res, 405, 'Method Not Allowed');
+        return;
+      }
+      const position =
+        body.position != null ? Number(body.position) : undefined;
       moveKanbanCard(cardId, group, String(body.column_id ?? ''), position);
       jsonOk(res, { ok: true });
     } else if (method === 'PATCH') {
+      const patchPri = body.priority === null
+        ? null
+        : ['high', 'medium', 'low'].includes(String(body.priority ?? ''))
+          ? (body.priority as 'high' | 'medium' | 'low')
+          : undefined;
       updateKanbanCard(
-        cardId, group,
+        cardId,
+        group,
         body.title != null ? String(body.title) : undefined,
         body.description != null ? String(body.description) : undefined,
+        patchPri,
       );
       jsonOk(res, { ok: true });
     } else if (method === 'DELETE') {
       deleteKanbanCard(cardId, group);
-      res.writeHead(204); res.end();
+      res.writeHead(204);
+      res.end();
     } else {
       jsonErr(res, 405, 'Method Not Allowed');
     }

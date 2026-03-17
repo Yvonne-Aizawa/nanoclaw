@@ -43,10 +43,11 @@ export function createKanbanHandler(groupFolder: string): InProcessMcpHandler {
           .map((col) => {
             const cards = col.cards.length
               ? col.cards
-                  .map(
-                    (c) =>
-                      `  - [${c.id}] ${c.title}${c.description ? `: ${c.description}` : ''}`,
-                  )
+                  .map((c) => {
+                    const pri = c.priority ? ` [${c.priority}]` : '';
+                    const desc = c.description ? `: ${c.description}` : '';
+                    return `  - [${c.id}]${pri} ${c.title}${desc}`;
+                  })
                   .join('\n')
               : '  (empty)';
             return `## ${col.name} [${col.id}]\n${cards}`;
@@ -115,9 +116,13 @@ export function createKanbanHandler(groupFolder: string): InProcessMcpHandler {
         column_id: z.string().describe('Column ID to add the card to'),
         title: z.string().describe('Card title'),
         description: z.string().optional().describe('Optional description'),
+        priority: z
+          .enum(['high', 'medium', 'low'])
+          .optional()
+          .describe('Priority level'),
       },
-      async ({ column_id, title, description }) => {
-        const card = addKanbanCard(groupFolder, column_id, title, description);
+      async ({ column_id, title, description, priority }) => {
+        const card = addKanbanCard(groupFolder, column_id, title, description, priority);
         return {
           content: [
             {
@@ -131,14 +136,22 @@ export function createKanbanHandler(groupFolder: string): InProcessMcpHandler {
 
     server.tool(
       'kanban_update_card',
-      "Update a card's title and/or description.",
+      "Update a card's title, description, and/or priority.",
       {
         card_id: z.string().describe('Card ID'),
         title: z.string().optional().describe('New title'),
         description: z.string().optional().describe('New description'),
+        priority: z
+          .enum(['high', 'medium', 'low', 'none'])
+          .optional()
+          .describe('Priority level, or "none" to clear'),
       },
-      async ({ card_id, title, description }) => {
-        updateKanbanCard(card_id, groupFolder, title, description);
+      async ({ card_id, title, description, priority }) => {
+        const pri =
+          priority === 'none'
+            ? null
+            : (priority as 'high' | 'medium' | 'low' | undefined);
+        updateKanbanCard(card_id, groupFolder, title, description, pri);
         return {
           content: [
             { type: 'text' as const, text: `Card ${card_id} updated.` },

@@ -29,15 +29,16 @@ kanban_delete_column(column_id: "col_abc123")
 ```
 
 ### `kanban_add_card`
-Add a card to a column (appended at the bottom).
+Add a card to a column (appended at the bottom). Priority is optional: `high`, `medium`, or `low`.
 ```
-kanban_add_card(column_id: "col_abc123", title: "Fix login bug", description: "Users can't log in on mobile")
+kanban_add_card(column_id: "col_abc123", title: "Fix login bug", description: "Users can't log in on mobile", priority: "high")
 ```
 
 ### `kanban_update_card`
-Update a card's title and/or description.
+Update a card's title, description, and/or priority. Use `priority: "none"` to clear it.
 ```
-kanban_update_card(card_id: "card_xyz789", title: "Fix login bug (urgent)")
+kanban_update_card(card_id: "card_xyz789", priority: "high")
+kanban_update_card(card_id: "card_xyz789", title: "Fixed", priority: "none")
 ```
 
 ### `kanban_move_card`
