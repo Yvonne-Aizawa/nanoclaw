@@ -75,6 +75,10 @@ import {
 } from './session-commands.js';
 import { startSchedulerLoop } from './task-scheduler.js';
 import { startHeartbeatWatcher } from './heartbeat.js';
+import {
+  restartServiceContainer,
+  startServiceContainers,
+} from './service-containers.js';
 import { Channel, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
 
@@ -592,6 +596,7 @@ async function main(): Promise<void> {
     : CONTAINER_IMAGE;
   pullImages(agentImage);
   await startMcpContainers();
+  startServiceContainers(registeredGroups);
 
   // Start credential proxy (containers route API calls through this)
   const proxyServer = await startCredentialProxy(
@@ -786,6 +791,7 @@ async function main(): Promise<void> {
     getAvailableGroups,
     writeGroupsSnapshot: (gf, im, ag, rj) =>
       writeGroupsSnapshot(gf, im, ag, rj),
+    restartService: restartServiceContainer,
   });
   queue.setProcessMessagesFn(processGroupMessages);
   recoverPendingMessages();

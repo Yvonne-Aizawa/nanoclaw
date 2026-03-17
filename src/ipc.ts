@@ -29,6 +29,7 @@ export interface IpcDeps {
     availableGroups: AvailableGroup[],
     registeredJids: Set<string>,
   ) => void;
+  restartService: (groupFolder: string) => void;
 }
 
 /**
@@ -195,6 +196,12 @@ export function startIpcWatcher(deps: IpcDeps): void {
                     'Unauthorized IPC reaction attempt blocked',
                   );
                 }
+              } else if (data.type === 'restart_service') {
+                deps.restartService(sourceGroup);
+                logger.info(
+                  { sourceGroup },
+                  'Service container restart requested via IPC',
+                );
               }
               fs.unlinkSync(filePath);
             } catch (err) {

@@ -178,12 +178,25 @@ export interface AppConfig {
   /**
    * Per-group overrides. Keyed by group folder name.
    */
-  group?: Record<string, {
-    heartbeat?: {
-      /** Override the global heartbeat interval for this group (ms). */
-      intervalMs?: number;
-    };
-  }>;
+  group?: Record<
+    string,
+    {
+      heartbeat?: {
+        /** Override the global heartbeat interval for this group (ms). */
+        intervalMs?: number;
+      };
+      service?: {
+        /** Set true to start a persistent service container for this group. */
+        enabled: boolean;
+        /** Docker image to use. Defaults to node:20-alpine. */
+        image?: string;
+        /** Memory limit, e.g. "256m". Defaults to "256m". */
+        memory?: string;
+        /** CPU limit (fractional cores). Defaults to 0.5. */
+        cpus?: number;
+      };
+    }
+  >;
   /**
    * Agent run limits. Controls how long a container agent is allowed to run.
    */

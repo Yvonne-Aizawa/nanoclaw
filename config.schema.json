@@ -153,6 +153,31 @@
                 "description": "Override the global heartbeat interval for this group (ms)"
               }
             }
+          },
+          "service": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Persistent outbound service container for this group (e.g. WebSocket client)",
+            "required": ["enabled"],
+            "properties": {
+              "enabled": {
+                "type": "boolean",
+                "description": "Set true to start the service container on launch"
+              },
+              "image": {
+                "type": "string",
+                "description": "Docker image to use. Defaults to node:20-alpine"
+              },
+              "memory": {
+                "type": "string",
+                "description": "Memory limit, e.g. \"256m\" or \"1g\". Defaults to \"256m\""
+              },
+              "cpus": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "CPU limit (fractional cores). Defaults to 0.5"
+              }
+            }
           }
         }
       }
