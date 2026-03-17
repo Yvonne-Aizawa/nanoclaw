@@ -935,9 +935,18 @@ export function updateKanbanCard(
   const now = new Date().toISOString();
   const fields: string[] = [];
   const values: unknown[] = [];
-  if (title !== undefined) { fields.push('title = ?'); values.push(title); }
-  if (description !== undefined) { fields.push('description = ?'); values.push(description); }
-  if (priority !== undefined) { fields.push('priority = ?'); values.push(priority); }
+  if (title !== undefined) {
+    fields.push('title = ?');
+    values.push(title);
+  }
+  if (description !== undefined) {
+    fields.push('description = ?');
+    values.push(description);
+  }
+  if (priority !== undefined) {
+    fields.push('priority = ?');
+    values.push(priority);
+  }
   if (fields.length === 0) return;
   fields.push('updated_at = ?');
   values.push(now, cardId, groupFolder);

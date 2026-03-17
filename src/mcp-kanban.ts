@@ -122,7 +122,13 @@ export function createKanbanHandler(groupFolder: string): InProcessMcpHandler {
           .describe('Priority level'),
       },
       async ({ column_id, title, description, priority }) => {
-        const card = addKanbanCard(groupFolder, column_id, title, description, priority);
+        const card = addKanbanCard(
+          groupFolder,
+          column_id,
+          title,
+          description,
+          priority,
+        );
         return {
           content: [
             {
