@@ -33,7 +33,7 @@ const inProcessHandlers = new Map<string, InProcessMcpHandler>();
 
 /** Returns true if the named MCP server runs in-process (no container to check). */
 export function isInProcessMcpServer(name: string): boolean {
-  return inProcessHandlers.has(name);
+  return inProcessHandlers.has(name) || name.startsWith('kanban-');
 }
 
 /**
@@ -41,7 +41,7 @@ export function isInProcessMcpServer(name: string): boolean {
  * In-process servers (brave, caldav) and remote proxies are not container-backed.
  */
 export function isContainerBackedMcpServer(name: string): boolean {
-  if (inProcessHandlers.has(name)) return false;
+  if (inProcessHandlers.has(name) || name.startsWith('kanban-')) return false;
   const { mcp } = loadAppConfig();
   const srv = (mcp?.servers ?? []).find((s) => s.name === name);
   if (srv) return srv.type !== 'remote';
@@ -377,7 +377,14 @@ export function startMcpRouter(): void {
 
     const name = match[1];
 
-    const inProcess = inProcessHandlers.get(name);
+    // Resolve in-process handler; create kanban handlers lazily per group.
+    let inProcess = inProcessHandlers.get(name);
+    if (!inProcess && name.startsWith('kanban-')) {
+      const group = name.slice('kanban-'.length);
+      inProcess = createKanbanHandler(group);
+      inProcessHandlers.set(name, inProcess);
+      logger.info({ group }, 'Kanban MCP handler created for group');
+    }
     if (inProcess) {
       inProcess.handleRequest(req, res).catch((err) => {
         logger.error({ err, name }, 'In-process MCP handler error');
@@ -439,8 +446,7 @@ function startInProcessMcpServers(): void {
   }
   inProcessHandlers.set('utils', createUtilsHandler());
   logger.info('Utils MCP server started in-process');
-  inProcessHandlers.set('kanban', createKanbanHandler());
-  logger.info('Kanban MCP server started in-process');
+  // Kanban handlers are created lazily per group in the router (kanban-{folder})
 }
 
 export async function startMcpContainers(): Promise<void> {
@@ -518,7 +524,13 @@ export function getMcpServerUrls(groupFolder?: string): Array<{
 
   // All servers are routed through the host MCP router at /<name>/mcp
   servers.push({ name: 'utils', url: `${base}/utils/mcp` });
-  servers.push({ name: 'kanban', url: `${base}/kanban/mcp` });
+  // Each group gets its own kanban endpoint — the group is bound server-side, not by the agent.
+  if (groupFolder) {
+    servers.push({
+      name: 'kanban',
+      url: `${base}/kanban-${groupFolder}/mcp`,
+    });
+  }
   if (browser?.enabled) {
     servers.push({
       name: 'playwright',

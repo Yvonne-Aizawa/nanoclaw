@@ -1,6 +1,7 @@
 /**
  * Kanban MCP server — runs in-process on the host.
- * Each group has an isolated board; group_folder scopes all queries.
+ * Group isolation is enforced server-side: the group folder is bound at
+ * handler creation time from the URL, not trusted from tool parameters.
  */
 
 import { randomUUID } from 'crypto';
@@ -22,9 +23,11 @@ import {
   updateKanbanCard,
 } from './db.js';
 
-const GROUP_FOLDER = z.string().describe('Your group folder name');
-
-export function createKanbanHandler(): InProcessMcpHandler {
+/**
+ * Create a kanban handler bound to a specific group.
+ * The group folder is set by the host — agents never supply it as a parameter.
+ */
+export function createKanbanHandler(groupFolder: string): InProcessMcpHandler {
   const sessions = new Map<string, StreamableHTTPServerTransport>();
 
   function createServer(): McpServer {
@@ -32,32 +35,42 @@ export function createKanbanHandler(): InProcessMcpHandler {
 
     server.tool(
       'kanban_get_board',
-      'Get the full Kanban board for your group — all columns and cards in order.',
-      { group_folder: GROUP_FOLDER },
-      async ({ group_folder }) => {
-        const board = getKanbanBoard(group_folder);
+      'Get the full Kanban board — all columns and cards in order.',
+      {},
+      async () => {
+        const board = getKanbanBoard(groupFolder);
         const text = board.columns
           .map((col) => {
             const cards = col.cards.length
               ? col.cards
-                  .map((c) => `  - [${c.id}] ${c.title}${c.description ? `: ${c.description}` : ''}`)
+                  .map(
+                    (c) =>
+                      `  - [${c.id}] ${c.title}${c.description ? `: ${c.description}` : ''}`,
+                  )
                   .join('\n')
               : '  (empty)';
             return `## ${col.name} [${col.id}]\n${cards}`;
           })
           .join('\n\n');
-        return { content: [{ type: 'text' as const, text: text || 'No columns yet.' }] };
+        return {
+          content: [{ type: 'text' as const, text: text || 'No columns yet.' }],
+        };
       },
     );
 
     server.tool(
       'kanban_add_column',
       'Add a new column to the board at the end.',
-      { group_folder: GROUP_FOLDER, name: z.string().describe('Column name') },
-      async ({ group_folder, name }) => {
-        const col = createKanbanColumn(group_folder, name);
+      { name: z.string().describe('Column name') },
+      async ({ name }) => {
+        const col = createKanbanColumn(groupFolder, name);
         return {
-          content: [{ type: 'text' as const, text: `Column "${col.name}" created (id: ${col.id}).` }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `Column "${col.name}" created (id: ${col.id}).`,
+            },
+          ],
         };
       },
     );
@@ -66,13 +79,16 @@ export function createKanbanHandler(): InProcessMcpHandler {
       'kanban_rename_column',
       'Rename an existing column.',
       {
-        group_folder: GROUP_FOLDER,
         column_id: z.string().describe('Column ID'),
         name: z.string().describe('New name'),
       },
-      async ({ group_folder, column_id, name }) => {
-        renameKanbanColumn(column_id, group_folder, name);
-        return { content: [{ type: 'text' as const, text: `Column renamed to "${name}".` }] };
+      async ({ column_id, name }) => {
+        renameKanbanColumn(column_id, groupFolder, name);
+        return {
+          content: [
+            { type: 'text' as const, text: `Column renamed to "${name}".` },
+          ],
+        };
       },
     );
 
@@ -80,12 +96,15 @@ export function createKanbanHandler(): InProcessMcpHandler {
       'kanban_delete_column',
       'Delete a column. Cards in the column are moved to the first remaining column. Deleting the last column also deletes all its cards.',
       {
-        group_folder: GROUP_FOLDER,
         column_id: z.string().describe('Column ID to delete'),
       },
-      async ({ group_folder, column_id }) => {
-        deleteKanbanColumn(column_id, group_folder);
-        return { content: [{ type: 'text' as const, text: `Column ${column_id} deleted.` }] };
+      async ({ column_id }) => {
+        deleteKanbanColumn(column_id, groupFolder);
+        return {
+          content: [
+            { type: 'text' as const, text: `Column ${column_id} deleted.` },
+          ],
+        };
       },
     );
 
@@ -93,31 +112,38 @@ export function createKanbanHandler(): InProcessMcpHandler {
       'kanban_add_card',
       'Add a new card to a column.',
       {
-        group_folder: GROUP_FOLDER,
         column_id: z.string().describe('Column ID to add the card to'),
         title: z.string().describe('Card title'),
         description: z.string().optional().describe('Optional description'),
       },
-      async ({ group_folder, column_id, title, description }) => {
-        const card = addKanbanCard(group_folder, column_id, title, description);
+      async ({ column_id, title, description }) => {
+        const card = addKanbanCard(groupFolder, column_id, title, description);
         return {
-          content: [{ type: 'text' as const, text: `Card "${card.title}" added (id: ${card.id}).` }],
+          content: [
+            {
+              type: 'text' as const,
+              text: `Card "${card.title}" added (id: ${card.id}).`,
+            },
+          ],
         };
       },
     );
 
     server.tool(
       'kanban_update_card',
-      'Update a card\'s title and/or description.',
+      "Update a card's title and/or description.",
       {
-        group_folder: GROUP_FOLDER,
         card_id: z.string().describe('Card ID'),
         title: z.string().optional().describe('New title'),
         description: z.string().optional().describe('New description'),
       },
-      async ({ group_folder, card_id, title, description }) => {
-        updateKanbanCard(card_id, group_folder, title, description);
-        return { content: [{ type: 'text' as const, text: `Card ${card_id} updated.` }] };
+      async ({ card_id, title, description }) => {
+        updateKanbanCard(card_id, groupFolder, title, description);
+        return {
+          content: [
+            { type: 'text' as const, text: `Card ${card_id} updated.` },
+          ],
+        };
       },
     );
 
@@ -125,14 +151,25 @@ export function createKanbanHandler(): InProcessMcpHandler {
       'kanban_move_card',
       'Move a card to a different column, optionally at a specific position (0-based).',
       {
-        group_folder: GROUP_FOLDER,
         card_id: z.string().describe('Card ID'),
         column_id: z.string().describe('Destination column ID'),
-        position: z.number().int().min(0).optional().describe('Position in column (0 = top). Omit to append.'),
+        position: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe('Position in column (0 = top). Omit to append.'),
       },
-      async ({ group_folder, card_id, column_id, position }) => {
-        moveKanbanCard(card_id, group_folder, column_id, position);
-        return { content: [{ type: 'text' as const, text: `Card ${card_id} moved to column ${column_id}.` }] };
+      async ({ card_id, column_id, position }) => {
+        moveKanbanCard(card_id, groupFolder, column_id, position);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Card ${card_id} moved to column ${column_id}.`,
+            },
+          ],
+        };
       },
     );
 
@@ -140,12 +177,15 @@ export function createKanbanHandler(): InProcessMcpHandler {
       'kanban_delete_card',
       'Delete a card permanently.',
       {
-        group_folder: GROUP_FOLDER,
         card_id: z.string().describe('Card ID'),
       },
-      async ({ group_folder, card_id }) => {
-        deleteKanbanCard(card_id, group_folder);
-        return { content: [{ type: 'text' as const, text: `Card ${card_id} deleted.` }] };
+      async ({ card_id }) => {
+        deleteKanbanCard(card_id, groupFolder);
+        return {
+          content: [
+            { type: 'text' as const, text: `Card ${card_id} deleted.` },
+          ],
+        };
       },
     );
 
