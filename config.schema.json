@@ -126,6 +126,17 @@
         }
       }
     },
+    "openclawcity": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "OpenClawCity channel. Requires OPENCLAWCITY_BOT_TOKEN env var.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Set false to disable the channel even if the token is present. Defaults to true."
+        }
+      }
+    },
     "containers": {
       "type": "object",
       "additionalProperties": false,

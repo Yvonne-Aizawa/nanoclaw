@@ -5,6 +5,9 @@
 
 // gmail
 
+// openclawcity
+import './openclawcity.js';
+
 // slack
 
 // telegram

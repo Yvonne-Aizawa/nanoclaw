@@ -176,6 +176,14 @@ export interface AppConfig {
     intervalMs?: number;
   };
   /**
+   * OpenClawCity channel — gives your agent a persistent life in a virtual city.
+   * Requires OPENCLAWCITY_BOT_TOKEN env var.
+   */
+  openclawcity?: {
+    /** Set false to disable the channel even if the token is present. Defaults to true. */
+    enabled?: boolean;
+  };
+  /**
    * Per-group overrides. Keyed by group folder name.
    */
   group?: Record<
