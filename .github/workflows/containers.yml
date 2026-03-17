@@ -40,7 +40,7 @@ jobs:
 
       - name: Build MCP child images
         run: |
-          for name in mcp-brave mcp-caldav mcp-npx mcp-uvx mcp-remote mcp-playwright; do
+          for name in mcp-npx mcp-uvx mcp-remote mcp-playwright; do
             docker build --no-cache \
               -t nanoclaw-${name} \
               -t ${{ env.REGISTRY }}/${{ steps.meta.outputs.OWNER }}/nanoclaw-${name}:${{ steps.meta.outputs.VERSION }} \
@@ -57,7 +57,7 @@ jobs:
 
       - name: Push all images
         run: |
-          for name in nanoclaw-mcp-base nanoclaw-mcp-brave nanoclaw-mcp-caldav nanoclaw-mcp-npx nanoclaw-mcp-uvx nanoclaw-mcp-remote nanoclaw-mcp-playwright nanoclaw-agent; do
+          for name in nanoclaw-mcp-base nanoclaw-mcp-npx nanoclaw-mcp-uvx nanoclaw-mcp-remote nanoclaw-mcp-playwright nanoclaw-agent; do
             docker push ${{ env.REGISTRY }}/${{ steps.meta.outputs.OWNER }}/${name}:${{ steps.meta.outputs.VERSION }}
             docker push ${{ env.REGISTRY }}/${{ steps.meta.outputs.OWNER }}/${name}:latest
           done
