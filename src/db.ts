@@ -201,6 +201,20 @@ function createSchema(database: Database.Database): void {
   } catch {
     /* column already exists */
   }
+
+  // Add card dependency table (migration for existing DBs)
+  try {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS kanban_card_deps (
+        card_id       TEXT NOT NULL,
+        depends_on_id TEXT NOT NULL,
+        group_folder  TEXT NOT NULL,
+        PRIMARY KEY (card_id, depends_on_id)
+      );
+    `);
+  } catch {
+    /* table already exists */
+  }
 }
 
 export function initDatabase(): void {
@@ -753,6 +767,7 @@ export interface KanbanCard {
   title: string;
   description: string | null;
   priority: 'high' | 'medium' | 'low' | null;
+  deps: string[]; // card IDs this card depends on (is blocked by)
   position: number;
   created_at: string;
   updated_at: string;
@@ -785,11 +800,28 @@ export function getKanbanBoard(groupFolder: string): KanbanBoard {
     )
     .all(groupFolder) as KanbanColumn[];
 
-  const cards = db
+  const rawCards = db
     .prepare(
       `SELECT * FROM kanban_cards WHERE group_folder = ? ORDER BY position`,
     )
-    .all(groupFolder) as KanbanCard[];
+    .all(groupFolder) as Omit<KanbanCard, 'deps'>[];
+
+  const rawDeps = db
+    .prepare(
+      `SELECT card_id, depends_on_id FROM kanban_card_deps WHERE group_folder = ?`,
+    )
+    .all(groupFolder) as { card_id: string; depends_on_id: string }[];
+
+  const depsByCard = new Map<string, string[]>();
+  for (const d of rawDeps) {
+    if (!depsByCard.has(d.card_id)) depsByCard.set(d.card_id, []);
+    depsByCard.get(d.card_id)!.push(d.depends_on_id);
+  }
+
+  const cards: KanbanCard[] = rawCards.map((c) => ({
+    ...c,
+    deps: depsByCard.get(c.id) ?? [],
+  }));
 
   const cardsByColumn = new Map<string, KanbanCard[]>();
   for (const card of cards) {
@@ -919,6 +951,7 @@ export function addKanbanCard(
     title,
     description: description ?? null,
     priority: priority ?? null,
+    deps: [],
     position,
     created_at: now,
     updated_at: now,
@@ -978,10 +1011,41 @@ export function moveKanbanCard(
 }
 
 export function deleteKanbanCard(cardId: string, groupFolder: string): void {
+  db.prepare(
+    `DELETE FROM kanban_card_deps WHERE (card_id = ? OR depends_on_id = ?) AND group_folder = ?`,
+  ).run(cardId, cardId, groupFolder);
   db.prepare(`DELETE FROM kanban_cards WHERE id = ? AND group_folder = ?`).run(
     cardId,
     groupFolder,
   );
+}
+
+export function addKanbanCardDep(
+  cardId: string,
+  dependsOnId: string,
+  groupFolder: string,
+): void {
+  if (cardId === dependsOnId) throw new Error('A card cannot depend on itself');
+  const cardOk = db
+    .prepare(`SELECT id FROM kanban_cards WHERE id = ? AND group_folder = ?`)
+    .get(cardId, groupFolder);
+  const depOk = db
+    .prepare(`SELECT id FROM kanban_cards WHERE id = ? AND group_folder = ?`)
+    .get(dependsOnId, groupFolder);
+  if (!cardOk || !depOk) throw new Error('Card not found in group');
+  db.prepare(
+    `INSERT OR IGNORE INTO kanban_card_deps (card_id, depends_on_id, group_folder) VALUES (?, ?, ?)`,
+  ).run(cardId, dependsOnId, groupFolder);
+}
+
+export function removeKanbanCardDep(
+  cardId: string,
+  dependsOnId: string,
+  groupFolder: string,
+): void {
+  db.prepare(
+    `DELETE FROM kanban_card_deps WHERE card_id = ? AND depends_on_id = ? AND group_folder = ?`,
+  ).run(cardId, dependsOnId, groupFolder);
 }
 
 // --- JSON migration ---

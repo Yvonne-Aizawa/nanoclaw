@@ -64,6 +64,26 @@
     .pri-high   { background: #2b0d0d; color: #f87171; }
     .pri-medium { background: #2b1f0d; color: #fb923c; }
     .pri-low    { background: #0d1f2b; color: #60a5fa; }
+    .deps-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+    .dep-chip { font-size: 0.68rem; color: #94a3b8; background: #0f1117;
+                border: 1px solid #263045; border-radius: 4px; padding: 1px 6px;
+                max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dep-chip.blocked { border-color: #f87171; color: #f87171; background: #2b0d0d; }
+    .blocked-badge { font-size: 0.65rem; color: #f87171; margin-top: 4px; display: flex;
+                     align-items: center; gap: 3px; }
+    .dep-remove { background: none; border: none; color: #475569; cursor: pointer;
+                  font-size: 0.7rem; padding: 0 2px; line-height: 1; }
+    .dep-remove:hover { color: #f87171; }
+    .dep-add-row { display: flex; gap: 6px; margin-top: 6px; }
+    .dep-add-row select { flex: 1; font-size: 0.78rem; }
+    .dep-add-row button { font-size: 0.78rem; padding: 4px 10px; border-radius: 5px;
+                          background: #1e2535; border: 1px solid #263045; color: #94a3b8; cursor: pointer; }
+    .dep-add-row button:hover { border-color: #3b82f6; color: #93c5fd; }
+    .dep-list { list-style: none; padding: 0; margin: 6px 0 0; }
+    .dep-list li { display: flex; align-items: center; justify-content: space-between;
+                   font-size: 0.78rem; color: #94a3b8; padding: 3px 0;
+                   border-bottom: 1px solid #1e2535; }
+    .dep-list li:last-child { border-bottom: none; }
     /* Modal */
     .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.6);
                 display: flex; align-items: center; justify-content: center; z-index: 100; }
@@ -124,6 +144,14 @@
           <option value="low">Low</option>
         </select>
       </div>
+      <div class="field" id="deps-field" style="display:none;">
+        <label>Blocked by (dependencies)</label>
+        <ul class="dep-list" id="dep-list"></ul>
+        <div class="dep-add-row">
+          <select id="dep-add-sel"><option value="">— add dependency —</option></select>
+          <button type="button" onclick="addDepFromModal()">Add</button>
+        </div>
+      </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
         <button class="btn btn-primary" id="modal-save">Save</button>
@@ -147,6 +175,19 @@
   function esc(s) {
     return String(s == null ? '' : s)
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function findCard(cardId) {
+    for (const col of board.columns)
+      for (const card of col.cards)
+        if (card.id === cardId) return card;
+    return null;
+  }
+
+  function allCards() {
+    const out = [];
+    for (const col of board.columns) out.push(...col.cards);
+    return out;
   }
 
   async function api(method, path, body) {
@@ -282,6 +323,22 @@
       div.insertBefore(descEl, actions);
     }
 
+    if (card.deps && card.deps.length > 0) {
+      const depsRow = document.createElement('div');
+      depsRow.className = 'deps-row';
+      const lastColId = board.columns[board.columns.length - 1]?.id;
+      card.deps.forEach(depId => {
+        const depCard = findCard(depId);
+        const chip = document.createElement('span');
+        const isDone = depCard && depCard.column_id === lastColId;
+        chip.className = 'dep-chip' + (isDone ? '' : ' blocked');
+        chip.title = depCard ? depCard.title : depId;
+        chip.textContent = '⊘ ' + (depCard ? depCard.title : depId);
+        depsRow.appendChild(chip);
+      });
+      div.insertBefore(depsRow, actions);
+    }
+
     // Drag events
     div.addEventListener('dragstart', e => {
       dragCard = { cardId: card.id, fromColId: colId };
@@ -392,6 +449,7 @@
     document.getElementById('card-title-inp').value = '';
     document.getElementById('card-desc-inp').value = '';
     document.getElementById('card-pri-inp').value = '';
+    document.getElementById('deps-field').style.display = 'none';
     document.getElementById('card-modal').classList.remove('hidden');
     document.getElementById('card-title-inp').focus();
     document.getElementById('modal-save').onclick = saveCard;
@@ -403,9 +461,71 @@
     document.getElementById('card-title-inp').value = card.title;
     document.getElementById('card-desc-inp').value = card.description || '';
     document.getElementById('card-pri-inp').value = card.priority || '';
+    document.getElementById('deps-field').style.display = '';
+    renderDepList(card);
+    populateDepSelect(card);
     document.getElementById('card-modal').classList.remove('hidden');
     document.getElementById('card-title-inp').focus();
     document.getElementById('modal-save').onclick = saveCard;
+  }
+
+  function renderDepList(card) {
+    const list = document.getElementById('dep-list');
+    list.innerHTML = '';
+    (card.deps || []).forEach(depId => {
+      const depCard = findCard(depId);
+      const li = document.createElement('li');
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = depCard ? depCard.title : depId;
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'dep-remove';
+      removeBtn.textContent = '×';
+      removeBtn.title = 'Remove dependency';
+      removeBtn.onclick = async () => {
+        await api('DELETE', '/api/kanban/' + encodeURIComponent(currentGroup) + '/cards/' + encodeURIComponent(card.id) + '/deps/' + encodeURIComponent(depId));
+        board = await api('GET', '/api/kanban/' + encodeURIComponent(currentGroup));
+        // Refresh the card reference
+        const updated = findCard(card.id);
+        if (updated) { modalMode.card = updated; renderDepList(updated); populateDepSelect(updated); }
+        renderBoard();
+      };
+      li.append(nameSpan, removeBtn);
+      list.appendChild(li);
+    });
+    if (!(card.deps || []).length) {
+      const li = document.createElement('li');
+      li.style.color = '#334155';
+      li.textContent = 'No dependencies';
+      list.appendChild(li);
+    }
+  }
+
+  function populateDepSelect(card) {
+    const sel = document.getElementById('dep-add-sel');
+    sel.innerHTML = '<option value="">— add dependency —</option>';
+    allCards().forEach(c => {
+      if (c.id === card.id) return; // skip self
+      if ((card.deps || []).includes(c.id)) return; // already a dep
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = c.title;
+      sel.appendChild(opt);
+    });
+  }
+
+  async function addDepFromModal() {
+    const card = modalMode && modalMode.card;
+    if (!card) return;
+    const depId = document.getElementById('dep-add-sel').value;
+    if (!depId) return;
+    try {
+      await api('POST', '/api/kanban/' + encodeURIComponent(currentGroup) + '/cards/' + encodeURIComponent(card.id) + '/deps',
+        { depends_on_id: depId });
+      board = await api('GET', '/api/kanban/' + encodeURIComponent(currentGroup));
+      const updated = findCard(card.id);
+      if (updated) { modalMode.card = updated; renderDepList(updated); populateDepSelect(updated); }
+      renderBoard();
+    } catch(err) { alert('Failed to add dependency: ' + err.message); }
   }
 
   function closeModal() {

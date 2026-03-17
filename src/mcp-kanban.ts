@@ -14,11 +14,13 @@ import { z } from 'zod';
 import { InProcessMcpHandler } from './mcp-brave.js';
 import {
   addKanbanCard,
+  addKanbanCardDep,
   createKanbanColumn,
   deleteKanbanCard,
   deleteKanbanColumn,
   getKanbanBoard,
   moveKanbanCard,
+  removeKanbanCardDep,
   renameKanbanColumn,
   updateKanbanCard,
 } from './db.js';
@@ -203,6 +205,46 @@ export function createKanbanHandler(groupFolder: string): InProcessMcpHandler {
         return {
           content: [
             { type: 'text' as const, text: `Card ${card_id} deleted.` },
+          ],
+        };
+      },
+    );
+
+    server.tool(
+      'kanban_add_dep',
+      'Mark card A as depending on (blocked by) card B. Card A cannot be considered ready until card B is done.',
+      {
+        card_id: z.string().describe('Card ID that depends on another card'),
+        depends_on_id: z.string().describe('Card ID that must be completed first'),
+      },
+      async ({ card_id, depends_on_id }) => {
+        addKanbanCardDep(card_id, depends_on_id, groupFolder);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Card ${card_id} now depends on ${depends_on_id}.`,
+            },
+          ],
+        };
+      },
+    );
+
+    server.tool(
+      'kanban_remove_dep',
+      'Remove a dependency between two cards.',
+      {
+        card_id: z.string().describe('Card ID'),
+        depends_on_id: z.string().describe('Card ID to remove as a dependency'),
+      },
+      async ({ card_id, depends_on_id }) => {
+        removeKanbanCardDep(card_id, depends_on_id, groupFolder);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Dependency removed: ${card_id} no longer depends on ${depends_on_id}.`,
+            },
           ],
         };
       },

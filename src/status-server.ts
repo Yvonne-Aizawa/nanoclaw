@@ -7,12 +7,14 @@ import ejs from 'ejs';
 
 import {
   addKanbanCard,
+  addKanbanCardDep,
   createKanbanColumn,
   deleteKanbanCard,
   deleteKanbanColumn,
   getAllRegisteredGroups,
   getKanbanBoard,
   moveKanbanCard,
+  removeKanbanCardDep,
   renameKanbanColumn,
   updateKanbanCard,
 } from './db.js';
@@ -181,10 +183,14 @@ async function handleKanban(
   }
 
   // /api/kanban/:group/cards[/:cardId[/move]]
-  const cardMatch = rest.match(/^cards(?:\/([^/]+)(?:\/(move))?)?$/);
+  // matches: cards | cards/:id | cards/:id/move | cards/:id/deps | cards/:id/deps/:depId
+  const cardMatch = rest.match(
+    /^cards(?:\/([^/]+)(?:\/(move|deps)(?:\/([^/]+))?)?)?$/,
+  );
   if (cardMatch) {
     const cardId = cardMatch[1] ? decodeURIComponent(cardMatch[1]) : undefined;
     const action = cardMatch[2];
+    const subId = cardMatch[3] ? decodeURIComponent(cardMatch[3]) : undefined;
     const body =
       method !== 'GET' && method !== 'DELETE'
         ? ((await readBody(req)) as Record<string, unknown>)
@@ -219,6 +225,25 @@ async function handleKanban(
         body.position != null ? Number(body.position) : undefined;
       moveKanbanCard(cardId, group, String(body.column_id ?? ''), position);
       jsonOk(res, { ok: true });
+    } else if (action === 'deps') {
+      if (subId) {
+        // DELETE /cards/:id/deps/:depId
+        if (method !== 'DELETE') {
+          jsonErr(res, 405, 'Method Not Allowed');
+          return;
+        }
+        removeKanbanCardDep(cardId, subId, group);
+        res.writeHead(204);
+        res.end();
+      } else {
+        // POST /cards/:id/deps  { depends_on_id }
+        if (method !== 'POST') {
+          jsonErr(res, 405, 'Method Not Allowed');
+          return;
+        }
+        addKanbanCardDep(cardId, String(body.depends_on_id ?? ''), group);
+        jsonOk(res, { ok: true });
+      }
     } else if (method === 'PATCH') {
       const patchPri =
         body.priority === null
@@ -256,7 +281,10 @@ export function startStatusServer(
     const server = createServer((req, res) => {
       handleRequest(req, res).catch((err) => {
         logger.error({ err }, 'Status server error');
-        if (!res.headersSent) { res.writeHead(500); res.end('Internal Server Error'); }
+        if (!res.headersSent) {
+          res.writeHead(500);
+          res.end('Internal Server Error');
+        }
       });
     });
 

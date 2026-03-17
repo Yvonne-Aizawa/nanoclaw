@@ -54,5 +54,17 @@ Delete a card permanently.
 kanban_delete_card(card_id: "card_xyz789")
 ```
 
+### `kanban_add_dep`
+Mark a card as blocked by (dependent on) another card. The dependent card cannot be considered ready until the blocking card is done.
+```
+kanban_add_dep(card_id: "card_xyz789", depends_on_id: "card_abc123")
+```
+
+### `kanban_remove_dep`
+Remove a dependency between two cards.
+```
+kanban_remove_dep(card_id: "card_xyz789", depends_on_id: "card_abc123")
+```
+
 ## Default Columns
 On first use, the board is seeded with: **To Do**, **In Progress**, **Done**.
