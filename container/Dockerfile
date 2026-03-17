@@ -4,10 +4,11 @@
 
 FROM node:22-slim
 
-# Install git (used by Claude Code for repository operations)
+# Install git and PDF tools
 RUN apt-get update && apt-get install -y \
     curl \
     git \
+    poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Install claude-code globally
@@ -27,6 +28,10 @@ COPY agent-runner/ ./
 
 # Build TypeScript
 RUN npm run build
+
+# Install pdf-reader CLI
+COPY skills/pdf-reader/pdf-reader /usr/local/bin/pdf-reader
+RUN chmod +x /usr/local/bin/pdf-reader
 
 # Create workspace directories
 RUN mkdir -p /workspace/group /workspace/global /workspace/extra /workspace/ipc/messages /workspace/ipc/tasks /workspace/ipc/input
