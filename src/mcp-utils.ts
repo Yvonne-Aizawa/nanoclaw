@@ -94,6 +94,38 @@ export function createUtilsHandler(): InProcessMcpHandler {
       },
     );
 
+    server.tool(
+      'service_restart',
+      'Restart the service container for your group. Use after writing or updating service/index.js.',
+      {
+        group_folder: z
+          .string()
+          .describe('Your group folder name'),
+      },
+      async ({ group_folder }) => {
+        const messagesDir = path.join(
+          DATA_DIR,
+          'ipc',
+          group_folder,
+          'messages',
+        );
+        fs.mkdirSync(messagesDir, { recursive: true });
+        const file = path.join(
+          messagesDir,
+          `restart-${Date.now()}-${randomUUID()}.json`,
+        );
+        fs.writeFileSync(file, JSON.stringify({ type: 'restart_service' }));
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: 'Service container restart requested.',
+            },
+          ],
+        };
+      },
+    );
+
     return server;
   }
 

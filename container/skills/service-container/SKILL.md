@@ -40,18 +40,11 @@ The `chatJid` must be the JID of your group (e.g. `tg:-5149439771`).
 
 ### Restarting after edits
 
-After editing `service/index.js`, write a restart IPC file:
+After editing `service/index.js`, call the `service_restart` MCP tool:
 
-```js
-function restartSelf() {
-  const payload = JSON.stringify({ type: 'restart_service' });
-  const file = `/workspace/ipc/input/${Date.now()}-restart.json`;
-  fs.writeFileSync(`${file}.tmp`, payload);
-  fs.renameSync(`${file}.tmp`, file);
-}
 ```
-
-Or trigger from the agent container itself the same way.
+service_restart(group_folder: "your-group-folder")
+```
 
 ## Autonomous loop pattern
 
