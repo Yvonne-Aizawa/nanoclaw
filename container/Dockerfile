@@ -9,6 +9,8 @@ RUN apt-get update && apt-get install -y \
     curl \
     git \
     poppler-utils \
+    python3 \
+    python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
 # Install claude-code globally
