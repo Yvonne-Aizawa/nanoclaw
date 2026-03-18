@@ -66,6 +66,10 @@ function writeBuildingSessionId(
   );
 }
 
+export function hasObcToken(groupFolder: string): boolean {
+  return readToken(groupFolder) !== '';
+}
+
 export function createObcHandler(groupFolder: string): InProcessMcpHandler {
   const token = readToken(groupFolder);
   if (!token) {
@@ -270,7 +274,9 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
       {
         building_id: z
           .string()
-          .describe('Building UUID (from obc_get_heartbeat recent_events or obc_get_position)'),
+          .describe(
+            'Building UUID (from obc_get_heartbeat recent_events or obc_get_position)',
+          ),
       },
       async ({ building_id }) => {
         const res = await apiJson('POST', '/buildings/enter', { building_id });
@@ -552,25 +558,42 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
         if (data.city_bulletin) lines.push(`Bulletin: ${data.city_bulletin}`);
         if (data.owner_mission) {
           const m = data.owner_mission as Record<string, unknown>;
-          lines.push(`Mission: ${m.description ?? ''} (focus: ${m.focus_type ?? '?'})`);
+          lines.push(
+            `Mission: ${m.description ?? ''} (focus: ${m.focus_type ?? '?'})`,
+          );
         }
         if (data.location) {
           const l = data.location as Record<string, unknown>;
           lines.push(`Location: ${l.zone_name ?? l.zoneName ?? '?'}`);
         }
-        if (Array.isArray(data.needs_attention) && data.needs_attention.length > 0) {
+        if (
+          Array.isArray(data.needs_attention) &&
+          data.needs_attention.length > 0
+        ) {
           lines.push('Needs attention:');
-          for (const item of (data.needs_attention as Array<Record<string, unknown>>).slice(0, 10))
-            lines.push(`  - ${item.type ?? '?'}: ${item.summary ?? item.from ?? ''}`);
+          for (const item of (
+            data.needs_attention as Array<Record<string, unknown>>
+          ).slice(0, 10))
+            lines.push(
+              `  - ${item.type ?? '?'}: ${item.summary ?? item.from ?? ''}`,
+            );
         }
-        if (Array.isArray(data.active_quests) && data.active_quests.length > 0) {
+        if (
+          Array.isArray(data.active_quests) &&
+          data.active_quests.length > 0
+        ) {
           const titles = (data.active_quests as Array<Record<string, unknown>>)
             .slice(0, 5)
             .map((q) => q.title ?? '?');
           lines.push(`Active quests: ${titles.join(', ')}`);
         }
-        if (Array.isArray(data.trending_artifacts) && data.trending_artifacts.length > 0) {
-          const trending = (data.trending_artifacts as Array<Record<string, unknown>>)
+        if (
+          Array.isArray(data.trending_artifacts) &&
+          data.trending_artifacts.length > 0
+        ) {
+          const trending = (
+            data.trending_artifacts as Array<Record<string, unknown>>
+          )
             .slice(0, 3)
             .map((a) => `"${a.title ?? '?'}" by ${a.creator_name ?? '?'}`);
           lines.push(`Trending: ${trending.join(', ')}`);
@@ -578,7 +601,9 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
         // Extract building IDs from recent_events so the agent can use obc_enter
         if (Array.isArray(data.recent_events)) {
           const buildings = new Map<string, string>();
-          for (const e of data.recent_events as Array<Record<string, unknown>>) {
+          for (const e of data.recent_events as Array<
+            Record<string, unknown>
+          >) {
             const p = e.payload as Record<string, unknown> | undefined;
             if (p?.building_id) {
               buildings.set(
@@ -589,8 +614,7 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           }
           if (buildings.size > 0) {
             lines.push('\nNearby building IDs (from recent activity):');
-            for (const [id, type] of buildings)
-              lines.push(`  ${type}: ${id}`);
+            for (const [id, type] of buildings) lines.push(`  ${type}: ${id}`);
           }
         }
         return { content: [{ type: 'text' as const, text: lines.join('\n') }] };

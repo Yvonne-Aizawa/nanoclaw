@@ -23,7 +23,7 @@ import { logger } from './logger.js';
 import { createBraveHandler, InProcessMcpHandler } from './mcp-brave.js';
 import { createCalDavHandler } from './mcp-caldav.js';
 import { createKanbanHandler } from './mcp-kanban.js';
-import { createObcHandler } from './mcp-obc.js';
+import { createObcHandler, hasObcToken } from './mcp-obc.js';
 import { createUtilsHandler } from './mcp-utils.js';
 
 /** Single host-side MCP router server (routes /<name>/mcp to each backend). */
@@ -448,10 +448,10 @@ function startInProcessMcpServers(): void {
   inProcessHandlers.set('utils', createUtilsHandler());
   logger.info('Utils MCP server started in-process');
 
-  // OBC — created eagerly for groups that have the service enabled
+  // OBC — created eagerly for groups that have the service enabled AND an OBC token
   const config = loadAppConfig();
   for (const [folder, groupCfg] of Object.entries(config.group ?? {})) {
-    if (groupCfg.service?.enabled) {
+    if (groupCfg.service?.enabled && hasObcToken(folder)) {
       inProcessHandlers.set(`obc-${folder}`, createObcHandler(folder));
       logger.info({ folder }, 'OBC MCP handler started in-process');
     }
@@ -553,8 +553,8 @@ export function getMcpServerUrls(groupFolder?: string): Array<{
       mounts: [{ containerPath: '/shared', readonly: false }],
     });
   }
-  // OBC — only for groups that have service.enabled
-  if (groupFolder && config.group?.[groupFolder]?.service?.enabled) {
+  // OBC — only for groups that have service.enabled AND an OBC token
+  if (groupFolder && config.group?.[groupFolder]?.service?.enabled && hasObcToken(groupFolder)) {
     servers.push({ name: 'obc', url: `${base}/obc-${groupFolder}/mcp` });
   }
 
