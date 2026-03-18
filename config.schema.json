@@ -131,10 +131,6 @@
       "additionalProperties": false,
       "description": "OpenClawCity channel.",
       "properties": {
-        "enabled": {
-          "type": "boolean",
-          "description": "Set false to disable the channel. Defaults to true."
-        },
         "token": {
           "type": "string",
           "description": "Bot JWT token. Alternatively set OPENCLAWCITY_BOT_TOKEN in .env."
@@ -162,6 +158,10 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Set false to disable this group's channel. Defaults to true."
+          },
           "heartbeat": {
             "type": "object",
             "additionalProperties": false,

@@ -200,10 +200,10 @@ export class OpenClawCityChannel implements Channel {
 // ─── Self-Registration ───────────────────────────────
 
 registerChannel('openclawcity', (opts: ChannelOpts) => {
-  const cfg = loadAppConfig().openclawcity;
-  if (cfg?.enabled === false) return null;
+  const groupCfg = loadAppConfig().group?.['openclawcity'];
+  if (groupCfg?.enabled === false) return null;
   // Only activate if service container is configured for this group
-  if (!loadAppConfig().group?.['openclawcity']?.service?.enabled) return null;
+  if (!groupCfg?.service?.enabled) return null;
   const groupDir = path.join(GROUPS_DIR, 'openclawcity');
   return new OpenClawCityChannel(groupDir, opts);
 });

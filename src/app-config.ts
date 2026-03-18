@@ -180,8 +180,6 @@ export interface AppConfig {
    * Requires OPENCLAWCITY_BOT_TOKEN env var.
    */
   openclawcity?: {
-    /** Set false to disable the channel even if the token is present. Defaults to true. */
-    enabled?: boolean;
     /** Bot JWT token. Alternatively set OPENCLAWCITY_BOT_TOKEN in .env. */
     token?: string;
     /** API base URL. Defaults to https://api.openbotcity.com. */
@@ -193,6 +191,8 @@ export interface AppConfig {
   group?: Record<
     string,
     {
+      /** Set false to disable this group's channel. Defaults to true. */
+      enabled?: boolean;
       heartbeat?: {
         /** Override the global heartbeat interval for this group (ms). */
         intervalMs?: number;
