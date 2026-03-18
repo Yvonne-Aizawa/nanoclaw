@@ -1,6 +1,11 @@
 /**
- * Utility MCP server — runs in-process on the host.
- * Provides general-purpose tools available to all agents.
+ * Per-group service MCP server — runs in-process on the host.
+ *
+ * Provides service container management tools scoped to a single group.
+ * The group folder is bound at creation time so agents cannot target
+ * other groups' containers.
+ *
+ * Only created for groups with service.enabled = true.
  */
 
 import { randomUUID } from 'crypto';
@@ -10,84 +15,33 @@ import path from 'path';
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { z } from 'zod';
 
-import { InProcessMcpHandler } from './mcp-brave.js';
 import { DATA_DIR } from './config.js';
+import { InProcessMcpHandler } from './mcp-brave.js';
 
-const MAX_WAIT_SECONDS = 300;
-
-export function createUtilsHandler(): InProcessMcpHandler {
+export function createServiceHandler(groupFolder: string): InProcessMcpHandler {
   const sessions = new Map<string, StreamableHTTPServerTransport>();
 
   function createServer(): McpServer {
-    const server = new McpServer({ name: 'utils', version: '1.0.0' });
+    const server = new McpServer({ name: 'service', version: '1.0.0' });
 
     server.tool(
-      'wait',
-      `Wait for a specified number of seconds (max ${MAX_WAIT_SECONDS}) before continuing.`,
-      {
-        seconds: z
-          .number()
-          .min(1)
-          .max(MAX_WAIT_SECONDS)
-          .describe(`Number of seconds to wait (1–${MAX_WAIT_SECONDS})`),
-      },
-      async ({ seconds }) => {
-        const clamped = Math.min(
-          Math.max(Math.round(seconds), 1),
-          MAX_WAIT_SECONDS,
-        );
-        await new Promise<void>((resolve) =>
-          setTimeout(resolve, clamped * 1000),
-        );
-        return {
-          content: [
-            { type: 'text' as const, text: `Waited ${clamped} seconds.` },
-          ],
-        };
-      },
-    );
-
-    server.tool(
-      'react_to_message',
-      'React to a message with an emoji. Pass an empty string for emoji to remove the reaction.',
-      {
-        chat_jid: z.string().describe('The chat JID (e.g. tg:123456789)'),
-        message_id: z.string().describe('The message ID to react to'),
-        emoji: z
-          .string()
-          .describe('The emoji to react with, or empty string to remove'),
-        group_folder: z
-          .string()
-          .describe('Your group folder name (used to route the IPC message)'),
-      },
-      async ({ chat_jid, message_id, emoji, group_folder }) => {
-        const messagesDir = path.join(
-          DATA_DIR,
-          'ipc',
-          group_folder,
-          'messages',
-        );
+      'service_restart',
+      'Restart your service container. Use after writing or updating service/index.js.',
+      {},
+      async () => {
+        const messagesDir = path.join(DATA_DIR, 'ipc', groupFolder, 'messages');
         fs.mkdirSync(messagesDir, { recursive: true });
-        const payload = JSON.stringify({
-          type: 'react',
-          chatJid: chat_jid,
-          messageId: message_id,
-          emoji,
-        });
         const file = path.join(
           messagesDir,
-          `react-${Date.now()}-${randomUUID()}.json`,
+          `restart-${Date.now()}-${randomUUID()}.json`,
         );
-        fs.writeFileSync(file, payload);
+        fs.writeFileSync(file, JSON.stringify({ type: 'restart_service' }));
         return {
           content: [
             {
               type: 'text' as const,
-              text: emoji
-                ? `Reaction ${emoji} sent to message ${message_id}.`
-                : `Reaction removed from message ${message_id}.`,
+              text: 'Service container restart requested.',
             },
           ],
         };
