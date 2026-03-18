@@ -54,6 +54,7 @@ function startServiceContainer(
   image: string,
   memory: string,
   cpus: number,
+  ports: string[],
 ): void {
   const name = containerName(groupFolder);
   const ipcInputDir = path.join(DATA_DIR, 'ipc', groupFolder, 'input');
@@ -87,6 +88,7 @@ function startServiceContainer(
     `NANOCLAW_GROUP_FOLDER=${groupFolder}`,
     '-e',
     `ANTHROPIC_BASE_URL=http://${CONTAINER_HOST_GATEWAY}:${CREDENTIAL_PROXY_PORT}/chat`,
+    ...ports.flatMap((p) => ['-p', p]),
     image,
     'node',
     '/workspace/group/service/index.js',
@@ -130,10 +132,11 @@ export function startServiceContainers(
     const image = svcConfig.image ?? DEFAULT_IMAGE;
     const memory = svcConfig.memory ?? '256m';
     const cpus = svcConfig.cpus ?? 0.5;
+    const ports = svcConfig.ports ?? [];
 
     stopAndRemoveService(folder);
     try {
-      startServiceContainer(folder, image, memory, cpus);
+      startServiceContainer(folder, image, memory, cpus, ports);
     } catch (err) {
       logger.error({ err, folder }, 'Failed to start service container');
     }
@@ -167,10 +170,11 @@ export function restartServiceContainer(groupFolder: string): void {
   const image = svcConfig.image ?? DEFAULT_IMAGE;
   const memory = svcConfig.memory ?? '256m';
   const cpus = svcConfig.cpus ?? 0.5;
+  const ports = svcConfig.ports ?? [];
 
   stopAndRemoveService(groupFolder);
   try {
-    startServiceContainer(groupFolder, image, memory, cpus);
+    startServiceContainer(groupFolder, image, memory, cpus, ports);
     logger.info({ groupFolder }, 'Service container restarted');
   } catch (err) {
     logger.error({ err, groupFolder }, 'Failed to restart service container');

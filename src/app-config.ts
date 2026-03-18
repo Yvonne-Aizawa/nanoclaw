@@ -196,6 +196,11 @@ export interface AppConfig {
         memory?: string;
         /** CPU limit (fractional cores). Defaults to 0.5. */
         cpus?: number;
+        /**
+         * Host ports to expose from the service container.
+         * Format: "hostPort:containerPort" e.g. "8080:3000"
+         */
+        ports?: string[];
       };
       /**
        * MCP server allowlist for this group.

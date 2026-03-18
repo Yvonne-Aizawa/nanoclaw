@@ -180,6 +180,11 @@
                 "type": "number",
                 "exclusiveMinimum": 0,
                 "description": "CPU limit (fractional cores). Defaults to 0.5"
+              },
+              "ports": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Host ports to expose. Format: \"hostPort:containerPort\" e.g. \"8080:3000\""
               }
             }
           },
