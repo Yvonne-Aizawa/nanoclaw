@@ -18,6 +18,7 @@ import {
   CREDENTIAL_PROXY_PORT,
   DATA_DIR,
   GROUPS_DIR,
+  TIMEZONE,
   WORKSPACE_DIR,
 } from './config.js';
 import {
@@ -86,6 +87,8 @@ function startServiceContainer(
     `${ipcInputDir}:/workspace/ipc/input`,
     '-e',
     `NANOCLAW_GROUP_FOLDER=${groupFolder}`,
+    '-e',
+    `TZ=${TIMEZONE}`,
     '-e',
     `ANTHROPIC_BASE_URL=http://${CONTAINER_HOST_GATEWAY}:${CREDENTIAL_PROXY_PORT}/chat`,
     ...ports.flatMap((p) => ['-p', p]),
