@@ -53,7 +53,7 @@ import {
   pullImages,
   startMcpContainers,
   stopMcpContainers,
-} from './mcp-containers.js';
+} from './mcp/containers.js';
 import { loadAppConfig } from './app-config.js';
 import { initBotPool } from './channels/telegram.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';

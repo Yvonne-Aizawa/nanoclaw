@@ -12,8 +12,8 @@ import pkg from 'rrule';
 import { createDAVClient, DAVCalendar, DAVCalendarObject } from 'tsdav';
 import { z } from 'zod';
 
-import { TIMEZONE } from './config.js';
-import { InProcessMcpHandler } from './mcp-brave.js';
+import { TIMEZONE } from '../config.js';
+import { InProcessMcpHandler } from './brave.js';
 
 const { rrulestr } = pkg;
 

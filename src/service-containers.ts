@@ -26,7 +26,7 @@ import {
   CONTAINER_RUNTIME_BIN,
   hostGatewayArgs,
 } from './container-runtime.js';
-import { NANOCLAW_NETWORK } from './mcp-containers.js';
+import { NANOCLAW_NETWORK } from './mcp/containers.js';
 import { logger } from './logger.js';
 import { RegisteredGroup } from './types.js';
 

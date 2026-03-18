@@ -11,7 +11,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 
-import { InProcessMcpHandler } from './mcp-brave.js';
+import { InProcessMcpHandler } from './brave.js';
 import {
   addKanbanCard,
   addKanbanCardDep,
@@ -23,7 +23,7 @@ import {
   removeKanbanCardDep,
   renameKanbanColumn,
   updateKanbanCard,
-} from './db.js';
+} from '../db.js';
 
 /**
  * Create a kanban handler bound to a specific group.

@@ -21,7 +21,7 @@ import {
 import {
   getMcpServerUrls,
   isContainerBackedMcpServer,
-} from './mcp-containers.js';
+} from './mcp/containers.js';
 import { logger } from './logger.js';
 
 interface AgentEntry {

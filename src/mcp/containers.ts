@@ -11,21 +11,21 @@ import { createServer, IncomingMessage, ServerResponse } from 'http';
 import os from 'os';
 import path from 'path';
 
-import { loadAppConfig } from './app-config.js';
-import { DATA_DIR } from './config.js';
+import { loadAppConfig } from '../app-config.js';
+import { DATA_DIR } from '../config.js';
 import {
   CONTAINER_HOST_GATEWAY,
   CONTAINER_RUNTIME_BIN,
   hostGatewayArgs,
   PROXY_BIND_HOST,
-} from './container-runtime.js';
-import { logger } from './logger.js';
-import { createBraveHandler, InProcessMcpHandler } from './mcp-brave.js';
-import { createCalDavHandler } from './mcp-caldav.js';
-import { createKanbanHandler } from './mcp-kanban.js';
-import { createObcHandler, hasObcToken } from './mcp-obc.js';
-import { createServiceHandler } from './mcp-service.js';
-import { createUtilsHandler } from './mcp-utils.js';
+} from '../container-runtime.js';
+import { logger } from '../logger.js';
+import { createBraveHandler, InProcessMcpHandler } from './brave.js';
+import { createCalDavHandler } from './caldav.js';
+import { createKanbanHandler } from './kanban.js';
+import { createObcHandler, hasObcToken } from './obc.js';
+import { createServiceHandler } from './service.js';
+import { createUtilsHandler } from './utils.js';
 
 /** Single host-side MCP router server (routes /<name>/mcp to each backend). */
 let mcpRouterServer: import('http').Server | null = null;

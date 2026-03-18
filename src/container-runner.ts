@@ -17,7 +17,7 @@ import {
   TIMEZONE,
 } from './config.js';
 import { loadAppConfig } from './app-config.js';
-import { getMcpServerUrls, NANOCLAW_NETWORK } from './mcp-containers.js';
+import { getMcpServerUrls, NANOCLAW_NETWORK } from './mcp/containers.js';
 import { resolveGroupFolderPath, resolveGroupIpcPath } from './group-folder.js';
 import { logger } from './logger.js';
 import {

@@ -12,8 +12,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 
-import { InProcessMcpHandler } from './mcp-brave.js';
-import { DATA_DIR } from './config.js';
+import { InProcessMcpHandler } from './brave.js';
+import { DATA_DIR } from '../config.js';
 
 const MAX_WAIT_SECONDS = 300;
 

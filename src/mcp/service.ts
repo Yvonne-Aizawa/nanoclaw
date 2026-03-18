@@ -16,8 +16,8 @@ import path from 'path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 
-import { DATA_DIR } from './config.js';
-import { InProcessMcpHandler } from './mcp-brave.js';
+import { DATA_DIR } from '../config.js';
+import { InProcessMcpHandler } from './brave.js';
 
 export function createServiceHandler(groupFolder: string): InProcessMcpHandler {
   const sessions = new Map<string, StreamableHTTPServerTransport>();

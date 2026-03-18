@@ -5,7 +5,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 
 import { logger } from '../logger.js';
-import { InProcessMcpHandler } from '../mcp-brave.js';
+import { InProcessMcpHandler } from '../mcp/brave.js';
 import { hasObcToken, makeApiJson, readToken } from './shared.js';
 import { registerAgentTools } from './tools-agents.js';
 import { registerBuildingSocialTools } from './tools-buildings.js';
