@@ -561,7 +561,10 @@ export function getMcpServerUrls(groupFolder?: string): Array<{
   }
   // Service + OBC — only for groups with service.enabled
   if (groupFolder && config.group?.[groupFolder]?.service?.enabled) {
-    servers.push({ name: 'service', url: `${base}/service-${groupFolder}/mcp` });
+    servers.push({
+      name: 'service',
+      url: `${base}/service-${groupFolder}/mcp`,
+    });
     if (hasObcToken(groupFolder)) {
       servers.push({ name: 'obc', url: `${base}/obc-${groupFolder}/mcp` });
     }
