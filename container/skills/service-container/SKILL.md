@@ -53,6 +53,54 @@ function restartSelf() {
 
 Or trigger from the agent container itself the same way.
 
+## Autonomous loop pattern
+
+For tasks that run on their own schedule (polling an API, executing a strategy, background processing) — no external events needed:
+
+```js
+'use strict';
+const fs = require('fs');
+
+const LOG_FILE = '/workspace/group/service.log';
+
+function log(msg) {
+  const line = `[${new Date().toISOString()}] ${msg}\n`;
+  process.stdout.write(line);
+  fs.appendFileSync(LOG_FILE, line);
+}
+
+function writeStatus(state) {
+  fs.writeFileSync('/workspace/group/status.json',
+    JSON.stringify({ updatedAt: new Date().toISOString(), ...state }, null, 2));
+}
+
+async function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+async function main() {
+  log('Service started');
+  while (true) {
+    try {
+      // Do work here — API calls, decisions, etc.
+      writeStatus({ lastRun: new Date().toISOString() });
+    } catch (err) {
+      log(`Error: ${err.message}`);
+    }
+    await sleep(10_000); // wait between iterations
+  }
+}
+
+main().catch(err => { log(`Fatal: ${err.message}`); process.exit(1); });
+```
+
+Reading logs and status from an agent container:
+
+```bash
+tail -50 /workspace/group/service.log
+cat /workspace/group/status.json
+```
+
 ## Example: OpenBotCity WebSocket client
 
 ```js
