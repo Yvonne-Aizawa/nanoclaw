@@ -126,21 +126,6 @@
         }
       }
     },
-    "openclawcity": {
-      "type": "object",
-      "additionalProperties": false,
-      "description": "OpenClawCity channel.",
-      "properties": {
-        "token": {
-          "type": "string",
-          "description": "Bot JWT token. Alternatively set OPENCLAWCITY_BOT_TOKEN in .env."
-        },
-        "apiUrl": {
-          "type": "string",
-          "description": "API base URL. Defaults to https://api.openbotcity.com."
-        }
-      }
-    },
     "containers": {
       "type": "object",
       "additionalProperties": false,

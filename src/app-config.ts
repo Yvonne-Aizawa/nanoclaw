@@ -176,16 +176,6 @@ export interface AppConfig {
     intervalMs?: number;
   };
   /**
-   * OpenClawCity channel — gives your agent a persistent life in a virtual city.
-   * Requires OPENCLAWCITY_BOT_TOKEN env var.
-   */
-  openclawcity?: {
-    /** Bot JWT token. Alternatively set OPENCLAWCITY_BOT_TOKEN in .env. */
-    token?: string;
-    /** API base URL. Defaults to https://api.openbotcity.com. */
-    apiUrl?: string;
-  };
-  /**
    * Per-group overrides. Keyed by group folder name.
    */
   group?: Record<
