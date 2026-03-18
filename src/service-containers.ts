@@ -14,7 +14,12 @@ import fs from 'fs';
 import path from 'path';
 
 import { loadAppConfig } from './app-config.js';
-import { CREDENTIAL_PROXY_PORT, DATA_DIR, GROUPS_DIR, WORKSPACE_DIR } from './config.js';
+import {
+  CREDENTIAL_PROXY_PORT,
+  DATA_DIR,
+  GROUPS_DIR,
+  WORKSPACE_DIR,
+} from './config.js';
 import {
   CONTAINER_HOST_GATEWAY,
   CONTAINER_RUNTIME_BIN,

@@ -269,10 +269,8 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
       'Enter a building. Returns session_id for use in subsequent speak calls.',
       {
         building_id: z
-          .number()
-          .int()
-          .positive()
-          .describe('Numeric building ID (from heartbeat nearby_buildings)'),
+          .string()
+          .describe('Building UUID (from obc_get_heartbeat recent_events or obc_get_position)'),
       },
       async ({ building_id }) => {
         const res = await apiJson('POST', '/buildings/enter', { building_id });
@@ -455,7 +453,11 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
             isError: true,
           };
         const data = (await res.json()) as Record<string, unknown>;
-        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+        return {
+          content: [
+            { type: 'text' as const, text: JSON.stringify(data, null, 2) },
+          ],
+        };
       },
     );
 
@@ -474,7 +476,9 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           };
         const data = (await res.json()) as Array<Record<string, unknown>>;
         if (!Array.isArray(data) || data.length === 0)
-          return { content: [{ type: 'text' as const, text: 'No nearby bots.' }] };
+          return {
+            content: [{ type: 'text' as const, text: 'No nearby bots.' }],
+          };
         const lines = data
           .slice(0, 20)
           .map(
@@ -501,7 +505,10 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           if (!me.ok)
             return {
               content: [
-                { type: 'text' as const, text: `Error fetching own ID: HTTP ${me.status}` },
+                {
+                  type: 'text' as const,
+                  text: `Error fetching own ID: HTTP ${me.status}`,
+                },
               ],
               isError: true,
             };
@@ -517,11 +524,78 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
             isError: true,
           };
         const data = (await res.json()) as Record<string, unknown>;
-        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+        return {
+          content: [
+            { type: 'text' as const, text: JSON.stringify(data, null, 2) },
+          ],
+        };
       },
     );
 
     // ─── World & Navigation ──────────────────────────────
+
+    server.tool(
+      'obc_get_heartbeat',
+      'Get the current city context: bulletin, quests, nearby agents, mission, trending artifacts, and your location.',
+      {},
+      async () => {
+        const res = await apiJson('GET', '/world/heartbeat');
+        if (!res.ok)
+          return {
+            content: [
+              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+            ],
+            isError: true,
+          };
+        const data = (await res.json()) as Record<string, unknown>;
+        const lines: string[] = ['[City Context]'];
+        if (data.city_bulletin) lines.push(`Bulletin: ${data.city_bulletin}`);
+        if (data.owner_mission) {
+          const m = data.owner_mission as Record<string, unknown>;
+          lines.push(`Mission: ${m.description ?? ''} (focus: ${m.focus_type ?? '?'})`);
+        }
+        if (data.location) {
+          const l = data.location as Record<string, unknown>;
+          lines.push(`Location: ${l.zone_name ?? l.zoneName ?? '?'}`);
+        }
+        if (Array.isArray(data.needs_attention) && data.needs_attention.length > 0) {
+          lines.push('Needs attention:');
+          for (const item of (data.needs_attention as Array<Record<string, unknown>>).slice(0, 10))
+            lines.push(`  - ${item.type ?? '?'}: ${item.summary ?? item.from ?? ''}`);
+        }
+        if (Array.isArray(data.active_quests) && data.active_quests.length > 0) {
+          const titles = (data.active_quests as Array<Record<string, unknown>>)
+            .slice(0, 5)
+            .map((q) => q.title ?? '?');
+          lines.push(`Active quests: ${titles.join(', ')}`);
+        }
+        if (Array.isArray(data.trending_artifacts) && data.trending_artifacts.length > 0) {
+          const trending = (data.trending_artifacts as Array<Record<string, unknown>>)
+            .slice(0, 3)
+            .map((a) => `"${a.title ?? '?'}" by ${a.creator_name ?? '?'}`);
+          lines.push(`Trending: ${trending.join(', ')}`);
+        }
+        // Extract building IDs from recent_events so the agent can use obc_enter
+        if (Array.isArray(data.recent_events)) {
+          const buildings = new Map<string, string>();
+          for (const e of data.recent_events as Array<Record<string, unknown>>) {
+            const p = e.payload as Record<string, unknown> | undefined;
+            if (p?.building_id) {
+              buildings.set(
+                String(p.building_id),
+                String(p.building_type ?? 'unknown'),
+              );
+            }
+          }
+          if (buildings.size > 0) {
+            lines.push('\nNearby building IDs (from recent activity):');
+            for (const [id, type] of buildings)
+              lines.push(`  ${type}: ${id}`);
+          }
+        }
+        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+      },
+    );
 
     server.tool(
       'obc_zone_transfer',
@@ -533,7 +607,9 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           content: [
             {
               type: 'text' as const,
-              text: res.ok ? `Transferred to zone ${zone_id}.` : `Error: HTTP ${res.status}`,
+              text: res.ok
+                ? `Transferred to zone ${zone_id}.`
+                : `Error: HTTP ${res.status}`,
             },
           ],
         };
@@ -555,9 +631,11 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           };
         const data = (await res.json()) as Array<Record<string, unknown>>;
         if (!Array.isArray(data) || data.length === 0)
-          return { content: [{ type: 'text' as const, text: 'No zones found.' }] };
-        const lines = data.map(
-          (z) => `[${z.id}] ${z.name ?? z.zone_name ?? '?'} — ${z.description ?? ''}`.trim(),
+          return {
+            content: [{ type: 'text' as const, text: 'No zones found.' }],
+          };
+        const lines = data.map((z) =>
+          `[${z.id}] ${z.name ?? z.zone_name ?? '?'} — ${z.description ?? ''}`.trim(),
         );
         return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
       },
@@ -577,7 +655,11 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
             isError: true,
           };
         const data = (await res.json()) as Record<string, unknown>;
-        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+        return {
+          content: [
+            { type: 'text' as const, text: JSON.stringify(data, null, 2) },
+          ],
+        };
       },
     );
 
@@ -586,7 +668,9 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
     server.tool(
       'obc_building_actions',
       'List available actions inside a building.',
-      { building_id: z.number().int().positive().describe('Building numeric ID') },
+      {
+        building_id: z.string().describe('Building UUID'),
+      },
       async ({ building_id }) => {
         const res = await apiJson('GET', `/buildings/${building_id}/actions`);
         if (!res.ok)
@@ -598,9 +682,11 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           };
         const data = (await res.json()) as Array<Record<string, unknown>>;
         if (!Array.isArray(data) || data.length === 0)
-          return { content: [{ type: 'text' as const, text: 'No actions available.' }] };
-        const lines = data.map(
-          (a) => `[${a.id ?? a.action_id}] ${a.name ?? a.label ?? '?'}: ${a.description ?? ''}`.trim(),
+          return {
+            content: [{ type: 'text' as const, text: 'No actions available.' }],
+          };
+        const lines = data.map((a) =>
+          `[${a.id ?? a.action_id}] ${a.name ?? a.label ?? '?'}: ${a.description ?? ''}`.trim(),
         );
         return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
       },
@@ -610,7 +696,7 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
       'obc_building_execute',
       'Execute an action inside the current building.',
       {
-        building_id: z.number().int().positive().describe('Building numeric ID'),
+        building_id: z.string().describe('Building UUID'),
         action_id: z.string().describe('Action ID (from obc_building_actions)'),
         params: z
           .record(z.string(), z.unknown())
@@ -631,7 +717,11 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
             isError: true,
           };
         const data = (await res.json()) as Record<string, unknown>;
-        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+        return {
+          content: [
+            { type: 'text' as const, text: JSON.stringify(data, null, 2) },
+          ],
+        };
       },
     );
 
@@ -651,7 +741,11 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
             isError: true,
           };
         const data = (await res.json()) as Record<string, unknown>;
-        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+        return {
+          content: [
+            { type: 'text' as const, text: JSON.stringify(data, null, 2) },
+          ],
+        };
       },
     );
 
@@ -660,12 +754,18 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
       'Approve an incoming DM request.',
       { request_id: z.string().describe('DM request ID') },
       async ({ request_id }) => {
-        const res = await apiJson('POST', `/dm/requests/${request_id}/approve`, {});
+        const res = await apiJson(
+          'POST',
+          `/dm/requests/${request_id}/approve`,
+          {},
+        );
         return {
           content: [
             {
               type: 'text' as const,
-              text: res.ok ? 'DM request approved.' : `Error: HTTP ${res.status}`,
+              text: res.ok
+                ? 'DM request approved.'
+                : `Error: HTTP ${res.status}`,
             },
           ],
         };
@@ -677,48 +777,53 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
       'Reject an incoming DM request.',
       { request_id: z.string().describe('DM request ID') },
       async ({ request_id }) => {
-        const res = await apiJson('POST', `/dm/requests/${request_id}/reject`, {});
+        const res = await apiJson(
+          'POST',
+          `/dm/requests/${request_id}/reject`,
+          {},
+        );
         return {
           content: [
             {
               type: 'text' as const,
-              text: res.ok ? 'DM request rejected.' : `Error: HTTP ${res.status}`,
+              text: res.ok
+                ? 'DM request rejected.'
+                : `Error: HTTP ${res.status}`,
             },
           ],
         };
       },
     );
 
-    server.tool(
-      'obc_dm_list',
-      'List your DM conversations.',
-      {},
-      async () => {
-        const res = await apiJson('GET', '/dm/conversations');
-        if (!res.ok)
-          return {
-            content: [
-              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
-            ],
-            isError: true,
-          };
-        const data = (await res.json()) as Array<Record<string, unknown>>;
-        if (!Array.isArray(data) || data.length === 0)
-          return { content: [{ type: 'text' as const, text: 'No conversations.' }] };
-        const lines = data.map(
-          (c) =>
-            `[${c.id}] with ${c.other_display_name ?? c.other_name ?? '?'} — last: ${c.last_message_preview ?? ''}`.trim(),
-        );
-        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
-      },
-    );
+    server.tool('obc_dm_list', 'List your DM conversations.', {}, async () => {
+      const res = await apiJson('GET', '/dm/conversations');
+      if (!res.ok)
+        return {
+          content: [
+            { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+          ],
+          isError: true,
+        };
+      const data = (await res.json()) as Array<Record<string, unknown>>;
+      if (!Array.isArray(data) || data.length === 0)
+        return {
+          content: [{ type: 'text' as const, text: 'No conversations.' }],
+        };
+      const lines = data.map((c) =>
+        `[${c.id}] with ${c.other_display_name ?? c.other_name ?? '?'} — last: ${c.last_message_preview ?? ''}`.trim(),
+      );
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+    });
 
     server.tool(
       'obc_dm_read',
       'Read messages in a DM conversation.',
       { conversation_id: z.string().describe('Conversation UUID') },
       async ({ conversation_id }) => {
-        const res = await apiJson('GET', `/dm/conversations/${conversation_id}`);
+        const res = await apiJson(
+          'GET',
+          `/dm/conversations/${conversation_id}`,
+        );
         if (!res.ok)
           return {
             content: [
@@ -733,9 +838,14 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
             ? (data as { messages: Array<Record<string, unknown>> }).messages
             : [];
         if (messages.length === 0)
-          return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+          return {
+            content: [
+              { type: 'text' as const, text: JSON.stringify(data, null, 2) },
+            ],
+          };
         const lines = (messages as Array<Record<string, unknown>>).map(
-          (m) => `${m.sender_name ?? m.from ?? '?'}: ${m.text ?? m.message ?? m.content ?? ''}`,
+          (m) =>
+            `${m.sender_name ?? m.from ?? '?'}: ${m.text ?? m.message ?? m.content ?? ''}`,
         );
         return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
       },
@@ -751,7 +861,9 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           content: [
             {
               type: 'text' as const,
-              text: res.ok ? `Now following ${bot_id}.` : `Error: HTTP ${res.status}`,
+              text: res.ok
+                ? `Now following ${bot_id}.`
+                : `Error: HTTP ${res.status}`,
             },
           ],
         };
@@ -768,7 +880,9 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           content: [
             {
               type: 'text' as const,
-              text: res.ok ? `Unfollowed ${bot_id}.` : `Error: HTTP ${res.status}`,
+              text: res.ok
+                ? `Unfollowed ${bot_id}.`
+                : `Error: HTTP ${res.status}`,
             },
           ],
         };
@@ -797,7 +911,11 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
             isError: true,
           };
         const data = (await res.json()) as Record<string, unknown>;
-        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+        return {
+          content: [
+            { type: 'text' as const, text: JSON.stringify(data, null, 2) },
+          ],
+        };
       },
     );
 
@@ -818,10 +936,11 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           };
         const data = (await res.json()) as Array<Record<string, unknown>>;
         if (!Array.isArray(data) || data.length === 0)
-          return { content: [{ type: 'text' as const, text: 'No proposals.' }] };
-        const lines = data.map(
-          (p) =>
-            `[${p.id}] ${p.type ?? '?'} from ${p.from_display_name ?? p.from ?? '?'}: ${p.message ?? ''}`.trim(),
+          return {
+            content: [{ type: 'text' as const, text: 'No proposals.' }],
+          };
+        const lines = data.map((p) =>
+          `[${p.id}] ${p.type ?? '?'} from ${p.from_display_name ?? p.from ?? '?'}: ${p.message ?? ''}`.trim(),
         );
         return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
       },
@@ -832,7 +951,11 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
       'Reject a collaboration proposal.',
       { proposal_id: z.string().describe('Proposal UUID') },
       async ({ proposal_id }) => {
-        const res = await apiJson('POST', `/proposals/${proposal_id}/reject`, {});
+        const res = await apiJson(
+          'POST',
+          `/proposals/${proposal_id}/reject`,
+          {},
+        );
         return {
           content: [
             {
@@ -868,7 +991,9 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           };
         const data = (await res.json()) as Array<Record<string, unknown>>;
         if (!Array.isArray(data) || data.length === 0)
-          return { content: [{ type: 'text' as const, text: 'No artifacts found.' }] };
+          return {
+            content: [{ type: 'text' as const, text: 'No artifacts found.' }],
+          };
         const lines = data.map(
           (a) =>
             `[${a.id}] "${a.title ?? '?'}" by ${a.creator_name ?? '?'} — reactions: ${a.reaction_count ?? 0}`,
@@ -891,7 +1016,11 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
             isError: true,
           };
         const data = (await res.json()) as Record<string, unknown>;
-        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+        return {
+          content: [
+            { type: 'text' as const, text: JSON.stringify(data, null, 2) },
+          ],
+        };
       },
     );
 
@@ -965,10 +1094,17 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           };
         const data = (await res.json()) as Array<Record<string, unknown>>;
         if (!Array.isArray(data) || data.length === 0)
-          return { content: [{ type: 'text' as const, text: 'No help requests.' }] };
-        const lines = data.slice(0, 20).map(
-          (h) => `[${h.id}] "${h.title ?? '?'}" by ${h.creator_name ?? '?'}: ${h.description ?? ''}`.slice(0, 120),
-        );
+          return {
+            content: [{ type: 'text' as const, text: 'No help requests.' }],
+          };
+        const lines = data
+          .slice(0, 20)
+          .map((h) =>
+            `[${h.id}] "${h.title ?? '?'}" by ${h.creator_name ?? '?'}: ${h.description ?? ''}`.slice(
+              0,
+              120,
+            ),
+          );
         return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
       },
     );
@@ -987,7 +1123,11 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
             isError: true,
           };
         const data = (await res.json()) as Record<string, unknown>;
-        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+        return {
+          content: [
+            { type: 'text' as const, text: JSON.stringify(data, null, 2) },
+          ],
+        };
       },
     );
 
@@ -1006,12 +1146,18 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
         const body: Record<string, unknown> = {};
         if (artifact_id) body.artifact_id = artifact_id;
         if (message) body.message = message;
-        const res = await apiJson('POST', `/help-requests/${request_id}/fulfill`, body);
+        const res = await apiJson(
+          'POST',
+          `/help-requests/${request_id}/fulfill`,
+          body,
+        );
         return {
           content: [
             {
               type: 'text' as const,
-              text: res.ok ? 'Help request fulfilled.' : `Error: HTTP ${res.status}`,
+              text: res.ok
+                ? 'Help request fulfilled.'
+                : `Error: HTTP ${res.status}`,
             },
           ],
         };
@@ -1023,12 +1169,18 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
       'Decline a help request.',
       { request_id: z.string().describe('Help request ID') },
       async ({ request_id }) => {
-        const res = await apiJson('POST', `/help-requests/${request_id}/decline`, {});
+        const res = await apiJson(
+          'POST',
+          `/help-requests/${request_id}/decline`,
+          {},
+        );
         return {
           content: [
             {
               type: 'text' as const,
-              text: res.ok ? 'Help request declined.' : `Error: HTTP ${res.status}`,
+              text: res.ok
+                ? 'Help request declined.'
+                : `Error: HTTP ${res.status}`,
             },
           ],
         };
@@ -1052,8 +1204,12 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           };
         const data = (await res.json()) as Array<Record<string, unknown>>;
         if (!Array.isArray(data) || data.length === 0)
-          return { content: [{ type: 'text' as const, text: 'No skills found.' }] };
-        const lines = data.map((s) => `${s.id ?? s.name}: ${s.description ?? ''}`.trim());
+          return {
+            content: [{ type: 'text' as const, text: 'No skills found.' }],
+          };
+        const lines = data.map((s) =>
+          `${s.id ?? s.name}: ${s.description ?? ''}`.trim(),
+        );
         return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
       },
     );
@@ -1084,7 +1240,10 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
       'Find bots that have a specific skill.',
       { skill: z.string().describe('Skill ID to search for') },
       async ({ skill }) => {
-        const res = await apiJson('GET', `/skills/search?skill=${encodeURIComponent(skill)}`);
+        const res = await apiJson(
+          'GET',
+          `/skills/search?skill=${encodeURIComponent(skill)}`,
+        );
         if (!res.ok)
           return {
             content: [
@@ -1094,10 +1253,17 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           };
         const data = (await res.json()) as Array<Record<string, unknown>>;
         if (!Array.isArray(data) || data.length === 0)
-          return { content: [{ type: 'text' as const, text: 'No bots found with that skill.' }] };
+          return {
+            content: [
+              { type: 'text' as const, text: 'No bots found with that skill.' },
+            ],
+          };
         const lines = data
           .slice(0, 20)
-          .map((b) => `${b.display_name ?? b.name ?? b.id} (score: ${b.score ?? '?'})`);
+          .map(
+            (b) =>
+              `${b.display_name ?? b.name ?? b.id} (score: ${b.score ?? '?'})`,
+          );
         return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
       },
     );
@@ -1116,7 +1282,11 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
             isError: true,
           };
         const data = (await res.json()) as Record<string, unknown>;
-        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+        return {
+          content: [
+            { type: 'text' as const, text: JSON.stringify(data, null, 2) },
+          ],
+        };
       },
     );
 
@@ -1134,7 +1304,11 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
             isError: true,
           };
         const data = (await res.json()) as Record<string, unknown>;
-        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+        return {
+          content: [
+            { type: 'text' as const, text: JSON.stringify(data, null, 2) },
+          ],
+        };
       },
     );
 
@@ -1153,9 +1327,11 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           };
         const data = (await res.json()) as Array<Record<string, unknown>>;
         if (!Array.isArray(data) || data.length === 0)
-          return { content: [{ type: 'text' as const, text: 'No milestones yet.' }] };
-        const lines = data.map(
-          (m) => `${m.title ?? m.name ?? '?'}: ${m.description ?? ''} (${m.achieved_at ?? '?'})`.trim(),
+          return {
+            content: [{ type: 'text' as const, text: 'No milestones yet.' }],
+          };
+        const lines = data.map((m) =>
+          `${m.title ?? m.name ?? '?'}: ${m.description ?? ''} (${m.achieved_at ?? '?'})`.trim(),
         );
         return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
       },
@@ -1173,7 +1349,9 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           content: [
             {
               type: 'text' as const,
-              text: res.ok ? 'Reflection recorded.' : `Error: HTTP ${res.status}`,
+              text: res.ok
+                ? 'Reflection recorded.'
+                : `Error: HTTP ${res.status}`,
             },
           ],
         };
@@ -1194,7 +1372,11 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
             isError: true,
           };
         const data = (await res.json()) as Record<string, unknown>;
-        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+        return {
+          content: [
+            { type: 'text' as const, text: JSON.stringify(data, null, 2) },
+          ],
+        };
       },
     );
 
@@ -1212,7 +1394,11 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
             isError: true,
           };
         const data = (await res.json()) as Record<string, unknown>;
-        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+        return {
+          content: [
+            { type: 'text' as const, text: JSON.stringify(data, null, 2) },
+          ],
+        };
       },
     );
 
@@ -1232,7 +1418,9 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           content: [
             {
               type: 'text' as const,
-              text: res.ok ? 'Identity shift recorded.' : `Error: HTTP ${res.status}`,
+              text: res.ok
+                ? 'Identity shift recorded.'
+                : `Error: HTTP ${res.status}`,
             },
           ],
         };
@@ -1256,9 +1444,11 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           };
         const data = (await res.json()) as Array<Record<string, unknown>>;
         if (!Array.isArray(data) || data.length === 0)
-          return { content: [{ type: 'text' as const, text: 'No active quests.' }] };
-        const lines = data.map(
-          (q) => `[${q.id}] "${q.title ?? '?'}": ${q.description ?? ''} (deadline: ${q.deadline ?? 'none'})`.trim(),
+          return {
+            content: [{ type: 'text' as const, text: 'No active quests.' }],
+          };
+        const lines = data.map((q) =>
+          `[${q.id}] "${q.title ?? '?'}": ${q.description ?? ''} (deadline: ${q.deadline ?? 'none'})`.trim(),
         );
         return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
       },
@@ -1280,7 +1470,9 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           content: [
             {
               type: 'text' as const,
-              text: res.ok ? 'Artifact submitted to quest.' : `Error: HTTP ${res.status}`,
+              text: res.ok
+                ? 'Artifact submitted to quest.'
+                : `Error: HTTP ${res.status}`,
             },
           ],
         };
@@ -1312,7 +1504,10 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
         const data = (await res.json()) as Record<string, unknown>;
         return {
           content: [
-            { type: 'text' as const, text: `Quest created (id: ${data.id ?? '?'}).` },
+            {
+              type: 'text' as const,
+              text: `Quest created (id: ${data.id ?? '?'}).`,
+            },
           ],
         };
       },
@@ -1333,9 +1528,11 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           };
         const data = (await res.json()) as Array<Record<string, unknown>>;
         if (!Array.isArray(data) || data.length === 0)
-          return { content: [{ type: 'text' as const, text: 'No research quests.' }] };
-        const lines = data.map(
-          (q) => `[${q.id}] "${q.title ?? '?'}": ${q.description ?? ''}`.trim(),
+          return {
+            content: [{ type: 'text' as const, text: 'No research quests.' }],
+          };
+        const lines = data.map((q) =>
+          `[${q.id}] "${q.title ?? '?'}": ${q.description ?? ''}`.trim(),
         );
         return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
       },
@@ -1355,7 +1552,9 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           content: [
             {
               type: 'text' as const,
-              text: res.ok ? 'Joined research quest.' : `Error: HTTP ${res.status}`,
+              text: res.ok
+                ? 'Joined research quest.'
+                : `Error: HTTP ${res.status}`,
             },
           ],
         };
@@ -1379,7 +1578,9 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           content: [
             {
               type: 'text' as const,
-              text: res.ok ? 'Findings submitted.' : `Error: HTTP ${res.status}`,
+              text: res.ok
+                ? 'Findings submitted.'
+                : `Error: HTTP ${res.status}`,
             },
           ],
         };
@@ -1445,34 +1646,32 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
         const data = (await res.json()) as Record<string, unknown>;
         return {
           content: [
-            { type: 'text' as const, text: `Feed post created (id: ${data.id ?? '?'}).` },
+            {
+              type: 'text' as const,
+              text: `Feed post created (id: ${data.id ?? '?'}).`,
+            },
           ],
         };
       },
     );
 
-    server.tool(
-      'obc_feed_mine',
-      'Get your own feed posts.',
-      {},
-      async () => {
-        const res = await apiJson('GET', '/feed/my-posts');
-        if (!res.ok)
-          return {
-            content: [
-              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
-            ],
-            isError: true,
-          };
-        const data = (await res.json()) as Array<Record<string, unknown>>;
-        if (!Array.isArray(data) || data.length === 0)
-          return { content: [{ type: 'text' as const, text: 'No posts yet.' }] };
-        const lines = data
-          .slice(0, 20)
-          .map((p) => `[${p.id}] ${p.content ?? p.text ?? ''}`.slice(0, 120));
-        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
-      },
-    );
+    server.tool('obc_feed_mine', 'Get your own feed posts.', {}, async () => {
+      const res = await apiJson('GET', '/feed/my-posts');
+      if (!res.ok)
+        return {
+          content: [
+            { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+          ],
+          isError: true,
+        };
+      const data = (await res.json()) as Array<Record<string, unknown>>;
+      if (!Array.isArray(data) || data.length === 0)
+        return { content: [{ type: 'text' as const, text: 'No posts yet.' }] };
+      const lines = data
+        .slice(0, 20)
+        .map((p) => `[${p.id}] ${p.content ?? p.text ?? ''}`.slice(0, 120));
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
+    });
 
     server.tool(
       'obc_feed_bot',
@@ -1512,12 +1711,18 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           };
         const data = (await res.json()) as Array<Record<string, unknown>>;
         if (!Array.isArray(data) || data.length === 0)
-          return { content: [{ type: 'text' as const, text: 'No posts in following feed.' }] };
+          return {
+            content: [
+              { type: 'text' as const, text: 'No posts in following feed.' },
+            ],
+          };
         const lines = data
           .slice(0, 20)
-          .map(
-            (p) =>
-              `${p.creator_name ?? p.author ?? '?'}: ${p.content ?? p.text ?? ''}`.slice(0, 120),
+          .map((p) =>
+            `${p.creator_name ?? p.author ?? '?'}: ${p.content ?? p.text ?? ''}`.slice(
+              0,
+              120,
+            ),
           );
         return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
       },
@@ -1566,23 +1771,22 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
 
     // ─── City Info (public) ──────────────────────────────
 
-    server.tool(
-      'obc_city_stats',
-      'Get city-wide statistics.',
-      {},
-      async () => {
-        const res = await apiJson('GET', '/city/stats');
-        if (!res.ok)
-          return {
-            content: [
-              { type: 'text' as const, text: `Error: HTTP ${res.status}` },
-            ],
-            isError: true,
-          };
-        const data = (await res.json()) as Record<string, unknown>;
-        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
-      },
-    );
+    server.tool('obc_city_stats', 'Get city-wide statistics.', {}, async () => {
+      const res = await apiJson('GET', '/city/stats');
+      if (!res.ok)
+        return {
+          content: [
+            { type: 'text' as const, text: `Error: HTTP ${res.status}` },
+          ],
+          isError: true,
+        };
+      const data = (await res.json()) as Record<string, unknown>;
+      return {
+        content: [
+          { type: 'text' as const, text: JSON.stringify(data, null, 2) },
+        ],
+      };
+    });
 
     server.tool(
       'obc_city_milestones',
@@ -1598,7 +1802,11 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
             isError: true,
           };
         const data = (await res.json()) as Record<string, unknown>;
-        return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] };
+        return {
+          content: [
+            { type: 'text' as const, text: JSON.stringify(data, null, 2) },
+          ],
+        };
       },
     );
 
@@ -1617,7 +1825,9 @@ export function createObcHandler(groupFolder: string): InProcessMcpHandler {
           };
         const data = (await res.json()) as Array<Record<string, unknown>>;
         if (!Array.isArray(data) || data.length === 0)
-          return { content: [{ type: 'text' as const, text: 'No leaderboard data.' }] };
+          return {
+            content: [{ type: 'text' as const, text: 'No leaderboard data.' }],
+          };
         const lines = data
           .slice(0, 20)
           .map(

@@ -25,7 +25,6 @@ import type { Channel } from '../types.js';
 
 const OCC_PREFIX = 'occ:';
 const IDENTITY_FILE = 'obc-identity.json';
-const OUT_DIR = 'obc-out';
 const IN_DIR = 'obc-in';
 const POLL_INTERVAL_MS = 5_000;
 const IN_POLL_INTERVAL_MS = 2_000;
@@ -53,7 +52,6 @@ export class OpenClawCityChannel implements Channel {
   // ─── Channel Interface ──────────────────────────────
 
   async connect(): Promise<void> {
-    fs.mkdirSync(path.join(this.groupDir, OUT_DIR), { recursive: true });
     fs.mkdirSync(path.join(this.groupDir, IN_DIR), { recursive: true });
 
     const identity = this.readIdentity();
@@ -68,17 +66,9 @@ export class OpenClawCityChannel implements Channel {
     // Returns immediately — activation happens in background if identity not yet available
   }
 
-  async sendMessage(jid: string, text: string): Promise<void> {
-    if (!this.ownsJid(jid)) return;
-    const outDir = path.join(this.groupDir, OUT_DIR);
-    fs.mkdirSync(outDir, { recursive: true });
-    const file = path.join(
-      outDir,
-      `${Date.now()}-${Math.random().toString(36).slice(2, 6)}.txt`,
-    );
-    const tmp = `${file}.tmp`;
-    fs.writeFileSync(tmp, text, 'utf-8');
-    fs.renameSync(tmp, file);
+  async sendMessage(_jid: string, _text: string): Promise<void> {
+    // Outbound actions are handled via MCP tools (obc_speak, obc_dm_reply, etc.).
+    // Text responses from the agent are intentionally discarded here.
   }
 
   isConnected(): boolean {
@@ -162,7 +152,11 @@ export class OpenClawCityChannel implements Channel {
           fs.unlinkSync(filePath);
           if (data.id && data.content) {
             logger.info(
-              { id: data.id, sender: data.sender_name, bot: data.is_bot_message },
+              {
+                id: data.id,
+                sender: data.sender_name,
+                bot: data.is_bot_message,
+              },
               'OpenClawCity: delivering event to agent',
             );
             this.opts.onMessage(this.jid, {
@@ -176,7 +170,10 @@ export class OpenClawCityChannel implements Channel {
               is_bot_message: data.is_bot_message || false,
             });
           } else {
-            logger.warn({ file }, 'OpenClawCity: obc-in file missing id or content, skipping');
+            logger.warn(
+              { file },
+              'OpenClawCity: obc-in file missing id or content, skipping',
+            );
           }
         } catch {
           /* bad file — skip */
