@@ -1,8 +1,18 @@
+import path from 'path';
+
 import pino from 'pino';
 
+const LOG_FILE = path.resolve(process.cwd(), 'workspace', 'logs', 'nanoclaw.jsonl');
+const level = process.env.LOG_LEVEL || 'info';
+
 export const logger = pino({
-  level: process.env.LOG_LEVEL || 'info',
-  transport: { target: 'pino-pretty', options: { colorize: true } },
+  level,
+  transport: {
+    targets: [
+      { target: 'pino-pretty', options: { colorize: true }, level },
+      { target: 'pino/file', options: { destination: LOG_FILE, mkdir: true }, level },
+    ],
+  },
 });
 
 // Route uncaught errors through pino so they get timestamps in stderr
