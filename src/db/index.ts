@@ -1,5 +1,5 @@
 export { db, initDatabase, _initTestDatabase } from './connection.js';
-export type { } from './connection.js';
+export type {} from './connection.js';
 
 export {
   storeChatMetadata,
@@ -14,11 +14,7 @@ export {
 } from './messages.js';
 export type { ChatInfo } from './messages.js';
 
-export {
-  getSession,
-  setSession,
-  getAllSessions,
-} from './sessions.js';
+export { getSession, setSession, getAllSessions } from './sessions.js';
 
 export {
   createTask,
@@ -46,10 +42,7 @@ export {
 } from './kanban.js';
 export type { KanbanColumn, KanbanCard, KanbanBoard } from './kanban.js';
 
-export {
-  upsertReaction,
-  getReactions,
-} from './reactions.js';
+export { upsertReaction, getReactions } from './reactions.js';
 
 export {
   getRouterState,

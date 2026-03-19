@@ -163,10 +163,7 @@ export function registerAgentTools(server: McpServer, apiJson: ApiJson): void {
             `  - ${item.type ?? '?'}: ${item.summary ?? item.from ?? ''}`,
           );
       }
-      if (
-        Array.isArray(data.active_quests) &&
-        data.active_quests.length > 0
-      ) {
+      if (Array.isArray(data.active_quests) && data.active_quests.length > 0) {
         const titles = (data.active_quests as Array<Record<string, unknown>>)
           .slice(0, 5)
           .map((q) => q.title ?? '?');
@@ -186,9 +183,7 @@ export function registerAgentTools(server: McpServer, apiJson: ApiJson): void {
       // Extract building IDs from recent_events so the agent can use obc_enter
       if (Array.isArray(data.recent_events)) {
         const buildings = new Map<string, string>();
-        for (const e of data.recent_events as Array<
-          Record<string, unknown>
-        >) {
+        for (const e of data.recent_events as Array<Record<string, unknown>>) {
           const p = e.payload as Record<string, unknown> | undefined;
           if (p?.building_id) {
             buildings.set(

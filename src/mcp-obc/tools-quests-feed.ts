@@ -158,9 +158,7 @@ export function registerQuestsFeedTools(
         content: [
           {
             type: 'text' as const,
-            text: res.ok
-              ? 'Findings submitted.'
-              : `Error: HTTP ${res.status}`,
+            text: res.ok ? 'Findings submitted.' : `Error: HTTP ${res.status}`,
           },
         ],
       };
@@ -239,9 +237,7 @@ export function registerQuestsFeedTools(
     const res = await apiJson('GET', '/feed/my-posts');
     if (!res.ok)
       return {
-        content: [
-          { type: 'text' as const, text: `Error: HTTP ${res.status}` },
-        ],
+        content: [{ type: 'text' as const, text: `Error: HTTP ${res.status}` }],
         isError: true,
       };
     const data = (await res.json()) as Array<Record<string, unknown>>;
@@ -355,16 +351,12 @@ export function registerQuestsFeedTools(
     const res = await apiJson('GET', '/city/stats');
     if (!res.ok)
       return {
-        content: [
-          { type: 'text' as const, text: `Error: HTTP ${res.status}` },
-        ],
+        content: [{ type: 'text' as const, text: `Error: HTTP ${res.status}` }],
         isError: true,
       };
     const data = (await res.json()) as Record<string, unknown>;
     return {
-      content: [
-        { type: 'text' as const, text: JSON.stringify(data, null, 2) },
-      ],
+      content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
     };
   });
 

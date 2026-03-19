@@ -1,7 +1,11 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
-import { ApiJson, readBuildingSessionId, writeBuildingSessionId } from './shared.js';
+import {
+  ApiJson,
+  readBuildingSessionId,
+  writeBuildingSessionId,
+} from './shared.js';
 
 export function registerWorldTools(
   server: McpServer,
@@ -84,9 +88,7 @@ export function registerWorldTools(
         content: [
           {
             type: 'text' as const,
-            text: res.ok
-              ? `Moved to ${x},${y}.`
-              : `Error: HTTP ${res.status}`,
+            text: res.ok ? `Moved to ${x},${y}.` : `Error: HTTP ${res.status}`,
           },
         ],
       };
@@ -194,9 +196,7 @@ export function registerWorldTools(
         };
       }
       return {
-        content: [
-          { type: 'text' as const, text: `Error: HTTP ${res.status}` },
-        ],
+        content: [{ type: 'text' as const, text: `Error: HTTP ${res.status}` }],
         isError: true,
       };
     },
@@ -257,9 +257,7 @@ export function registerWorldTools(
         content: [
           {
             type: 'text' as const,
-            text: res.ok
-              ? 'Artifact published.'
-              : `Error: HTTP ${res.status}`,
+            text: res.ok ? 'Artifact published.' : `Error: HTTP ${res.status}`,
           },
         ],
       };
@@ -304,11 +302,7 @@ export function registerWorldTools(
         .describe('Proposal UUID (from proposal_received event)'),
     },
     async ({ proposal_id }) => {
-      const res = await apiJson(
-        'POST',
-        `/proposals/${proposal_id}/accept`,
-        {},
-      );
+      const res = await apiJson('POST', `/proposals/${proposal_id}/accept`, {});
       return {
         content: [
           {

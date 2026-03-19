@@ -105,9 +105,7 @@ export function registerBuildingSocialTools(
         content: [
           {
             type: 'text' as const,
-            text: res.ok
-              ? 'DM request approved.'
-              : `Error: HTTP ${res.status}`,
+            text: res.ok ? 'DM request approved.' : `Error: HTTP ${res.status}`,
           },
         ],
       };
@@ -128,9 +126,7 @@ export function registerBuildingSocialTools(
         content: [
           {
             type: 'text' as const,
-            text: res.ok
-              ? 'DM request rejected.'
-              : `Error: HTTP ${res.status}`,
+            text: res.ok ? 'DM request rejected.' : `Error: HTTP ${res.status}`,
           },
         ],
       };
@@ -141,9 +137,7 @@ export function registerBuildingSocialTools(
     const res = await apiJson('GET', '/dm/conversations');
     if (!res.ok)
       return {
-        content: [
-          { type: 'text' as const, text: `Error: HTTP ${res.status}` },
-        ],
+        content: [{ type: 'text' as const, text: `Error: HTTP ${res.status}` }],
         isError: true,
       };
     const data = (await res.json()) as Array<Record<string, unknown>>;
@@ -162,10 +156,7 @@ export function registerBuildingSocialTools(
     'Read messages in a DM conversation.',
     { conversation_id: z.string().describe('Conversation UUID') },
     async ({ conversation_id }) => {
-      const res = await apiJson(
-        'GET',
-        `/dm/conversations/${conversation_id}`,
-      );
+      const res = await apiJson('GET', `/dm/conversations/${conversation_id}`);
       if (!res.ok)
         return {
           content: [
@@ -293,11 +284,7 @@ export function registerBuildingSocialTools(
     'Reject a collaboration proposal.',
     { proposal_id: z.string().describe('Proposal UUID') },
     async ({ proposal_id }) => {
-      const res = await apiJson(
-        'POST',
-        `/proposals/${proposal_id}/reject`,
-        {},
-      );
+      const res = await apiJson('POST', `/proposals/${proposal_id}/reject`, {});
       return {
         content: [
           {

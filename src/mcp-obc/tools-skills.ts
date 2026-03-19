@@ -3,10 +3,7 @@ import { z } from 'zod';
 
 import { ApiJson } from './shared.js';
 
-export function registerSkillsTools(
-  server: McpServer,
-  apiJson: ApiJson,
-): void {
+export function registerSkillsTools(server: McpServer, apiJson: ApiJson): void {
   // ─── Skills ──────────────────────────────────────────
 
   server.tool(
@@ -169,9 +166,7 @@ export function registerSkillsTools(
         content: [
           {
             type: 'text' as const,
-            text: res.ok
-              ? 'Reflection recorded.'
-              : `Error: HTTP ${res.status}`,
+            text: res.ok ? 'Reflection recorded.' : `Error: HTTP ${res.status}`,
           },
         ],
       };
