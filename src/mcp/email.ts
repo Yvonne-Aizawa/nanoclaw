@@ -44,6 +44,7 @@ function makeImap(cfg: EmailImapConfig): ImapFlow {
     port: cfg.port ?? 993,
     secure: cfg.tls !== false,
     auth: { user: cfg.username, pass: cfg.password },
+    tls: { rejectUnauthorized: false },
     logger: false,
   });
 }
@@ -54,6 +55,7 @@ function makeTransport(cfg: EmailSmtpConfig) {
     port: cfg.port ?? 587,
     secure: cfg.secure ?? false,
     auth: { user: cfg.username, pass: cfg.password },
+    tls: { rejectUnauthorized: false },
   });
 }
 
@@ -96,7 +98,10 @@ export function createEmailHandler(config: EmailConfig): InProcessMcpHandler {
               ],
             };
           } catch (e) {
-            return { content: [{ type: 'text' as const, text: `Error: ${errMsg(e)}` }], isError: true };
+            return {
+              content: [{ type: 'text' as const, text: `Error: ${errMsg(e)}` }],
+              isError: true,
+            };
           } finally {
             await client.logout().catch(() => {});
           }
@@ -107,10 +112,27 @@ export function createEmailHandler(config: EmailConfig): InProcessMcpHandler {
         'email_list',
         'List emails in a mailbox folder. Returns uid, from, subject, date, and whether it is read.',
         {
-          folder: z.string().default('INBOX').describe('Mailbox folder (default: INBOX)'),
-          limit: z.number().int().min(1).max(100).default(20).describe('Max messages to return (1–100)'),
-          offset: z.number().int().min(0).default(0).describe('Skip this many messages from newest'),
-          unread_only: z.boolean().default(false).describe('Only return unread messages'),
+          folder: z
+            .string()
+            .default('INBOX')
+            .describe('Mailbox folder (default: INBOX)'),
+          limit: z
+            .number()
+            .int()
+            .min(1)
+            .max(100)
+            .default(20)
+            .describe('Max messages to return (1–100)'),
+          offset: z
+            .number()
+            .int()
+            .min(0)
+            .default(0)
+            .describe('Skip this many messages from newest'),
+          unread_only: z
+            .boolean()
+            .default(false)
+            .describe('Only return unread messages'),
         },
         async (args) => {
           const client = makeImap(imapCfg);
@@ -118,7 +140,9 @@ export function createEmailHandler(config: EmailConfig): InProcessMcpHandler {
             await client.connect();
             const lock = await client.getMailboxLock(args.folder);
             try {
-              const query = args.unread_only ? { seen: false } : { all: true as const };
+              const query = args.unread_only
+                ? { seen: false }
+                : { all: true as const };
               const result = await client.search(query, { uid: true });
               const uids = result === false ? [] : result;
               const end = uids.length - args.offset;
@@ -126,11 +150,19 @@ export function createEmailHandler(config: EmailConfig): InProcessMcpHandler {
               slice.reverse();
 
               if (slice.length === 0) {
-                return { content: [{ type: 'text' as const, text: 'No messages found.' }] };
+                return {
+                  content: [
+                    { type: 'text' as const, text: 'No messages found.' },
+                  ],
+                };
               }
 
               const rows: string[] = [];
-              for await (const msg of client.fetch(slice, { envelope: true, flags: true }, { uid: true })) {
+              for await (const msg of client.fetch(
+                slice,
+                { envelope: true, flags: true },
+                { uid: true },
+              )) {
                 const from = msg.envelope?.from?.[0];
                 const fromStr = from ? formatAddress(from) : '(unknown)';
                 const isRead = msg.flags?.has('\\Seen') ?? false;
@@ -139,12 +171,17 @@ export function createEmailHandler(config: EmailConfig): InProcessMcpHandler {
                 );
               }
 
-              return { content: [{ type: 'text' as const, text: rows.join('\n') }] };
+              return {
+                content: [{ type: 'text' as const, text: rows.join('\n') }],
+              };
             } finally {
               lock.release();
             }
           } catch (e) {
-            return { content: [{ type: 'text' as const, text: `Error: ${errMsg(e)}` }], isError: true };
+            return {
+              content: [{ type: 'text' as const, text: `Error: ${errMsg(e)}` }],
+              isError: true,
+            };
           } finally {
             await client.logout().catch(() => {});
           }
@@ -155,12 +192,27 @@ export function createEmailHandler(config: EmailConfig): InProcessMcpHandler {
         'email_search',
         'Search emails by subject, sender, or body keyword.',
         {
-          folder: z.string().default('INBOX').describe('Mailbox folder to search'),
+          folder: z
+            .string()
+            .default('INBOX')
+            .describe('Mailbox folder to search'),
           subject: z.string().optional().describe('Subject contains'),
-          from: z.string().optional().describe('Sender address or name contains'),
+          from: z
+            .string()
+            .optional()
+            .describe('Sender address or name contains'),
           body: z.string().optional().describe('Body text contains'),
-          since: z.string().optional().describe('Only emails since this date (ISO format)'),
-          limit: z.number().int().min(1).max(50).default(10).describe('Max results'),
+          since: z
+            .string()
+            .optional()
+            .describe('Only emails since this date (ISO format)'),
+          limit: z
+            .number()
+            .int()
+            .min(1)
+            .max(50)
+            .default(10)
+            .describe('Max results'),
         },
         async (args) => {
           const client = makeImap(imapCfg);
@@ -188,11 +240,19 @@ export function createEmailHandler(config: EmailConfig): InProcessMcpHandler {
               slice.reverse();
 
               if (slice.length === 0) {
-                return { content: [{ type: 'text' as const, text: 'No matching messages.' }] };
+                return {
+                  content: [
+                    { type: 'text' as const, text: 'No matching messages.' },
+                  ],
+                };
               }
 
               const rows: string[] = [];
-              for await (const msg of client.fetch(slice, { envelope: true, flags: true }, { uid: true })) {
+              for await (const msg of client.fetch(
+                slice,
+                { envelope: true, flags: true },
+                { uid: true },
+              )) {
                 const from = msg.envelope?.from?.[0];
                 const fromStr = from ? formatAddress(from) : '(unknown)';
                 const isRead = msg.flags?.has('\\Seen') ?? false;
@@ -201,12 +261,17 @@ export function createEmailHandler(config: EmailConfig): InProcessMcpHandler {
                 );
               }
 
-              return { content: [{ type: 'text' as const, text: rows.join('\n') }] };
+              return {
+                content: [{ type: 'text' as const, text: rows.join('\n') }],
+              };
             } finally {
               lock.release();
             }
           } catch (e) {
-            return { content: [{ type: 'text' as const, text: `Error: ${errMsg(e)}` }], isError: true };
+            return {
+              content: [{ type: 'text' as const, text: `Error: ${errMsg(e)}` }],
+              isError: true,
+            };
           } finally {
             await client.logout().catch(() => {});
           }
@@ -219,7 +284,10 @@ export function createEmailHandler(config: EmailConfig): InProcessMcpHandler {
         {
           folder: z.string().default('INBOX').describe('Mailbox folder'),
           uid: z.number().int().describe('UID of the message to read'),
-          mark_read: z.boolean().default(true).describe('Mark message as read after fetching'),
+          mark_read: z
+            .boolean()
+            .default(true)
+            .describe('Mark message as read after fetching'),
         },
         async (args) => {
           const client = makeImap(imapCfg);
@@ -234,8 +302,12 @@ export function createEmailHandler(config: EmailConfig): InProcessMcpHandler {
                 { uid: true },
               )) {
                 const fromAddr = msg.envelope?.from?.[0];
-                const fromStr = fromAddr ? formatAddress(fromAddr) : '(unknown)';
-                const toStr = (msg.envelope?.to ?? []).map(formatAddress).join(', ');
+                const fromStr = fromAddr
+                  ? formatAddress(fromAddr)
+                  : '(unknown)';
+                const toStr = (msg.envelope?.to ?? [])
+                  .map(formatAddress)
+                  .join(', ');
 
                 let body = '';
                 if (msg.bodyParts) {
@@ -256,13 +328,20 @@ export function createEmailHandler(config: EmailConfig): InProcessMcpHandler {
                 );
 
                 if (args.mark_read) {
-                  await client.messageFlagsAdd([args.uid], ['\\Seen'], { uid: true });
+                  await client.messageFlagsAdd([args.uid], ['\\Seen'], {
+                    uid: true,
+                  });
                 }
               }
 
               if (msgs.length === 0) {
                 return {
-                  content: [{ type: 'text' as const, text: `Message UID ${args.uid} not found.` }],
+                  content: [
+                    {
+                      type: 'text' as const,
+                      text: `Message UID ${args.uid} not found.`,
+                    },
+                  ],
                   isError: true,
                 };
               }
@@ -271,7 +350,10 @@ export function createEmailHandler(config: EmailConfig): InProcessMcpHandler {
               lock.release();
             }
           } catch (e) {
-            return { content: [{ type: 'text' as const, text: `Error: ${errMsg(e)}` }], isError: true };
+            return {
+              content: [{ type: 'text' as const, text: `Error: ${errMsg(e)}` }],
+              isError: true,
+            };
           } finally {
             await client.logout().catch(() => {});
           }
@@ -292,13 +374,25 @@ export function createEmailHandler(config: EmailConfig): InProcessMcpHandler {
             await client.connect();
             const lock = await client.getMailboxLock(args.folder);
             try {
-              await client.messageMove([args.uid], args.destination, { uid: true });
-              return { content: [{ type: 'text' as const, text: `Message moved to ${args.destination}.` }] };
+              await client.messageMove([args.uid], args.destination, {
+                uid: true,
+              });
+              return {
+                content: [
+                  {
+                    type: 'text' as const,
+                    text: `Message moved to ${args.destination}.`,
+                  },
+                ],
+              };
             } finally {
               lock.release();
             }
           } catch (e) {
-            return { content: [{ type: 'text' as const, text: `Error: ${errMsg(e)}` }], isError: true };
+            return {
+              content: [{ type: 'text' as const, text: `Error: ${errMsg(e)}` }],
+              isError: true,
+            };
           } finally {
             await client.logout().catch(() => {});
           }
@@ -319,12 +413,17 @@ export function createEmailHandler(config: EmailConfig): InProcessMcpHandler {
             const lock = await client.getMailboxLock(args.folder);
             try {
               await client.messageDelete([args.uid], { uid: true });
-              return { content: [{ type: 'text' as const, text: 'Message deleted.' }] };
+              return {
+                content: [{ type: 'text' as const, text: 'Message deleted.' }],
+              };
             } finally {
               lock.release();
             }
           } catch (e) {
-            return { content: [{ type: 'text' as const, text: `Error: ${errMsg(e)}` }], isError: true };
+            return {
+              content: [{ type: 'text' as const, text: `Error: ${errMsg(e)}` }],
+              isError: true,
+            };
           } finally {
             await client.logout().catch(() => {});
           }
@@ -337,7 +436,9 @@ export function createEmailHandler(config: EmailConfig): InProcessMcpHandler {
         {
           folder: z.string().default('INBOX').describe('Mailbox folder'),
           uid: z.number().int().describe('UID of the message'),
-          mark: z.enum(['read', 'unread', 'flagged', 'unflagged']).describe('Mark to apply'),
+          mark: z
+            .enum(['read', 'unread', 'flagged', 'unflagged'])
+            .describe('Mark to apply'),
         },
         async (args) => {
           const client = makeImap(imapCfg);
@@ -355,14 +456,26 @@ export function createEmailHandler(config: EmailConfig): InProcessMcpHandler {
               if (add) {
                 await client.messageFlagsAdd([args.uid], [flag], { uid: true });
               } else {
-                await client.messageFlagsRemove([args.uid], [flag], { uid: true });
+                await client.messageFlagsRemove([args.uid], [flag], {
+                  uid: true,
+                });
               }
-              return { content: [{ type: 'text' as const, text: `Message marked as ${args.mark}.` }] };
+              return {
+                content: [
+                  {
+                    type: 'text' as const,
+                    text: `Message marked as ${args.mark}.`,
+                  },
+                ],
+              };
             } finally {
               lock.release();
             }
           } catch (e) {
-            return { content: [{ type: 'text' as const, text: `Error: ${errMsg(e)}` }], isError: true };
+            return {
+              content: [{ type: 'text' as const, text: `Error: ${errMsg(e)}` }],
+              isError: true,
+            };
           } finally {
             await client.logout().catch(() => {});
           }
@@ -379,12 +492,22 @@ export function createEmailHandler(config: EmailConfig): InProcessMcpHandler {
         'email_send',
         'Send an email via SMTP.',
         {
-          to: z.string().describe('Recipient(s) — comma-separated addresses or "Name <addr>" format'),
+          to: z
+            .string()
+            .describe(
+              'Recipient(s) — comma-separated addresses or "Name <addr>" format',
+            ),
           subject: z.string().describe('Email subject'),
           body: z.string().describe('Plain-text body'),
-          html: z.string().optional().describe('Optional HTML body (supplements plain-text)'),
+          html: z
+            .string()
+            .optional()
+            .describe('Optional HTML body (supplements plain-text)'),
           cc: z.string().optional().describe('CC recipients — comma-separated'),
-          bcc: z.string().optional().describe('BCC recipients — comma-separated'),
+          bcc: z
+            .string()
+            .optional()
+            .describe('BCC recipients — comma-separated'),
           reply_to: z.string().optional().describe('Reply-To address'),
         },
         async (args) => {
@@ -401,10 +524,18 @@ export function createEmailHandler(config: EmailConfig): InProcessMcpHandler {
               replyTo: args.reply_to,
             });
             return {
-              content: [{ type: 'text' as const, text: `Email sent. Message ID: ${info.messageId}` }],
+              content: [
+                {
+                  type: 'text' as const,
+                  text: `Email sent. Message ID: ${info.messageId}`,
+                },
+              ],
             };
           } catch (e) {
-            return { content: [{ type: 'text' as const, text: `Error: ${errMsg(e)}` }], isError: true };
+            return {
+              content: [{ type: 'text' as const, text: `Error: ${errMsg(e)}` }],
+              isError: true,
+            };
           }
         },
       );
@@ -422,7 +553,9 @@ export function createEmailHandler(config: EmailConfig): InProcessMcpHandler {
         const chunks: Buffer[] = [];
         for await (const chunk of req) chunks.push(chunk as Buffer);
         const body =
-          chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString()) : undefined;
+          chunks.length > 0
+            ? JSON.parse(Buffer.concat(chunks).toString())
+            : undefined;
 
         const existing = sessionId ? sessions.get(sessionId) : undefined;
         if (existing) {
