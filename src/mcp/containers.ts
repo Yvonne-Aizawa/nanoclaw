@@ -10,6 +10,7 @@ import fs from 'fs';
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 import os from 'os';
 import path from 'path';
+import { Readable } from 'stream';
 
 import { loadAppConfig } from '../app-config.js';
 import { DATA_DIR } from '../config.js';
@@ -277,10 +278,87 @@ interface McpRoute {
 
 const PASSTHROUGH_HEADERS = ['content-type', 'accept', 'mcp-session-id'];
 
+/**
+ * Wraps res.write / res.end to log the tools/call response once it arrives.
+ * Handles both plain JSON responses and SSE event-stream responses.
+ */
+function logToolResponse(
+  res: ServerResponse,
+  server: string,
+  rpcId: unknown,
+): void {
+  let isSSE = false;
+  let sseAccum = '';
+
+  const origSetHeader = res.setHeader.bind(res);
+  (res as any).setHeader = (...args: Parameters<typeof res.setHeader>) => {
+    const [name, value] = args;
+    if (
+      String(name).toLowerCase() === 'content-type' &&
+      String(value).includes('text/event-stream')
+    ) {
+      isSSE = true;
+    }
+    return origSetHeader(...args);
+  };
+
+  function parseSseChunk(chunk: string): void {
+    sseAccum += chunk;
+    const blocks = sseAccum.split('\n\n');
+    sseAccum = blocks.pop() ?? '';
+    for (const block of blocks) {
+      for (const line of block.split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const data = JSON.parse(line.slice(6)) as Record<string, unknown>;
+          if (data['id'] === rpcId && 'result' in data) {
+            logger.info(
+              { audit: 'mcp_tool_response', server, rpcId, result: data['result'] },
+              'MCP tool response',
+            );
+          }
+        } catch {
+          /* not parseable */
+        }
+      }
+    }
+  }
+
+  const origWrite = res.write.bind(res);
+  (res as any).write = (chunk: unknown, ...args: unknown[]) => {
+    if (isSSE && chunk) {
+      parseSseChunk(Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk));
+    }
+    return (origWrite as (...a: unknown[]) => boolean)(chunk, ...args);
+  };
+
+  const origEnd = res.end.bind(res);
+  (res as any).end = (chunk?: unknown, ...args: unknown[]) => {
+    if (isSSE) {
+      if (chunk) parseSseChunk(Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk));
+    } else if (chunk) {
+      const text = Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk);
+      try {
+        const data = JSON.parse(text) as Record<string, unknown>;
+        if (data['id'] === rpcId && 'result' in data) {
+          logger.info(
+            { audit: 'mcp_tool_response', server, rpcId, result: data['result'] },
+            'MCP tool response',
+          );
+        }
+      } catch {
+        /* not parseable */
+      }
+    }
+    return (origEnd as (...a: unknown[]) => ServerResponse)(chunk, ...args);
+  };
+}
+
 async function proxyRequest(
   req: IncomingMessage,
   res: ServerResponse,
   route: McpRoute,
+  preReadBody?: Buffer,
 ): Promise<void> {
   const injectedHeaders = route.headers ?? {};
   const injectedNames = new Set(
@@ -295,9 +373,14 @@ async function proxyRequest(
     }
   }
 
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) chunks.push(chunk as Buffer);
-  const body = chunks.length > 0 ? Buffer.concat(chunks) : undefined;
+  let body: Buffer | undefined;
+  if (preReadBody !== undefined) {
+    body = preReadBody.length > 0 ? preReadBody : undefined;
+  } else {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(chunk as Buffer);
+    body = chunks.length > 0 ? Buffer.concat(chunks) : undefined;
+  }
 
   try {
     const init: RequestInit = { method: req.method, headers };
@@ -379,38 +462,73 @@ export function startMcpRouter(): void {
 
     const name = match[1];
 
-    // Resolve in-process handler; create kanban handlers lazily per group.
-    let inProcess = inProcessHandlers.get(name);
-    if (!inProcess && name.startsWith('kanban-')) {
-      const group = name.slice('kanban-'.length);
-      inProcess = createKanbanHandler(group);
-      inProcessHandlers.set(name, inProcess);
-      logger.info({ group }, 'Kanban MCP handler created for group');
-    }
-    if (inProcess) {
-      inProcess.handleRequest(req, res).catch((err) => {
-        logger.error({ err, name }, 'In-process MCP handler error');
+    // Buffer the request body upfront so we can audit-log it and replay it to
+    // in-process handlers (which consume the stream themselves).
+    const bodyChunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => bodyChunks.push(chunk));
+    req.on('error', (err) => {
+      logger.error({ err, name }, 'MCP router request read error');
+      if (!res.headersSent) { res.writeHead(400); res.end(); }
+    });
+    req.on('end', () => {
+      const body = Buffer.concat(bodyChunks);
+
+      // Audit-log tools/call requests and wire up response logging.
+      let rpc: Record<string, unknown> | null = null;
+      try { rpc = JSON.parse(body.toString()) as Record<string, unknown>; } catch { /* not JSON */ }
+      if (rpc?.['method'] === 'tools/call') {
+        const params = rpc['params'] as Record<string, unknown> | undefined;
+        logger.info(
+          {
+            audit: 'mcp_tool_request',
+            server: name,
+            tool: params?.['name'],
+            args: params?.['arguments'],
+            rpcId: rpc['id'],
+          },
+          'MCP tool call',
+        );
+        logToolResponse(res, name, rpc['id']);
+      }
+
+      // Resolve in-process handler; create kanban handlers lazily per group.
+      let inProcess = inProcessHandlers.get(name);
+      if (!inProcess && name.startsWith('kanban-')) {
+        const group = name.slice('kanban-'.length);
+        inProcess = createKanbanHandler(group);
+        inProcessHandlers.set(name, inProcess);
+        logger.info({ group }, 'Kanban MCP handler created for group');
+      }
+      if (inProcess) {
+        // Reconstruct a readable from the buffered body so the MCP SDK can re-read it.
+        const fakeReq = Object.assign(
+          body.length > 0 ? Readable.from([body]) : Readable.from([]),
+          { headers: req.headers, method: req.method, url: req.url },
+        ) as unknown as IncomingMessage;
+        inProcess.handleRequest(fakeReq, res).catch((err) => {
+          logger.error({ err, name }, 'In-process MCP handler error');
+          if (!res.headersSent) {
+            res.writeHead(500);
+            res.end('Internal MCP error');
+          }
+        });
+        return;
+      }
+
+      const route = routes.get(name);
+      if (!route) {
+        res.writeHead(404);
+        res.end(`MCP server '${name}' not configured`);
+        return;
+      }
+
+      proxyRequest(req, res, route, body).catch((err) => {
+        logger.error({ err, name }, 'MCP router proxy error');
         if (!res.headersSent) {
           res.writeHead(500);
-          res.end('Internal MCP error');
+          res.end('Internal proxy error');
         }
       });
-      return;
-    }
-
-    const route = routes.get(name);
-    if (!route) {
-      res.writeHead(404);
-      res.end(`MCP server '${name}' not configured`);
-      return;
-    }
-
-    proxyRequest(req, res, route).catch((err) => {
-      logger.error({ err, name }, 'MCP router proxy error');
-      if (!res.headersSent) {
-        res.writeHead(500);
-        res.end('Internal proxy error');
-      }
     });
   });
 

@@ -33,6 +33,21 @@ export interface IpcDeps {
   onTasksChanged: () => void;
 }
 
+function resolveAgentFilePath(
+  sourceGroup: string,
+  containerPath: string,
+): string | null {
+  if (containerPath.startsWith('/workspace/group/')) {
+    const rel = containerPath.slice('/workspace/group/'.length);
+    return path.join(GROUPS_DIR, sourceGroup, rel);
+  }
+  if (containerPath.startsWith('/shared/')) {
+    const rel = containerPath.slice('/shared/'.length);
+    return path.join(DATA_DIR, 'playwright-shared', rel);
+  }
+  return null;
+}
+
 let ipcWatcherRunning = false;
 
 export function startIpcWatcher(deps: IpcDeps): void {
