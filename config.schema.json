@@ -97,6 +97,49 @@
               "description": "Restrict Ollama to these groups. Omit to allow all groups."
             }
           }
+        },
+        "email": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Email integration via IMAP (read) and SMTP (send). Credentials stay in the host process.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable the email MCP server"
+            },
+            "imap": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "IMAP configuration for reading email",
+              "required": ["host", "username", "password"],
+              "properties": {
+                "host": { "type": "string", "description": "IMAP server hostname" },
+                "port": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "IMAP port. Defaults to 993." },
+                "tls": { "type": "boolean", "description": "Use TLS. Defaults to true." },
+                "username": { "type": "string", "description": "IMAP username (usually email address)" },
+                "password": { "type": "string", "description": "IMAP password or app password" }
+              }
+            },
+            "smtp": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "SMTP configuration for sending email",
+              "required": ["host", "username", "password", "from"],
+              "properties": {
+                "host": { "type": "string", "description": "SMTP server hostname" },
+                "port": { "type": "integer", "minimum": 1, "maximum": 65535, "description": "SMTP port. Defaults to 587." },
+                "secure": { "type": "boolean", "description": "Use TLS (port 465). False = STARTTLS (port 587). Defaults to false." },
+                "username": { "type": "string", "description": "SMTP username" },
+                "password": { "type": "string", "description": "SMTP password or app password" },
+                "from": { "type": "string", "description": "From header, e.g. \"Alice <alice@example.com>\"" }
+              }
+            },
+            "groups": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Restrict email tools to these groups. Omit to allow all groups."
+            }
+          }
         }
       }
     },
