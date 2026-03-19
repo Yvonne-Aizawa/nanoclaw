@@ -30,26 +30,7 @@ export interface IpcDeps {
     registeredJids: Set<string>,
   ) => void;
   restartService: (groupFolder: string) => void;
-}
-
-/**
- * Translate a container-side file path to the corresponding host path.
- * /workspace/group/... → workspace/groups/<folder>/...
- * /shared/...          → workspace/data/playwright-shared/...
- */
-function resolveAgentFilePath(
-  sourceGroup: string,
-  containerPath: string,
-): string | null {
-  if (containerPath.startsWith('/workspace/group/')) {
-    const rel = containerPath.slice('/workspace/group/'.length);
-    return path.join(GROUPS_DIR, sourceGroup, rel);
-  }
-  if (containerPath.startsWith('/shared/')) {
-    const rel = containerPath.slice('/shared/'.length);
-    return path.join(DATA_DIR, 'playwright-shared', rel);
-  }
-  return null;
+  onTasksChanged: () => void;
 }
 
 let ipcWatcherRunning = false;
@@ -381,6 +362,7 @@ export async function processTaskIpc(
           { taskId, sourceGroup, targetFolder, contextMode },
           'Task created via IPC',
         );
+        deps.onTasksChanged();
       }
       break;
 
@@ -393,6 +375,7 @@ export async function processTaskIpc(
             { taskId: data.taskId, sourceGroup },
             'Task paused via IPC',
           );
+          deps.onTasksChanged();
         } else {
           logger.warn(
             { taskId: data.taskId, sourceGroup },
@@ -411,6 +394,7 @@ export async function processTaskIpc(
             { taskId: data.taskId, sourceGroup },
             'Task resumed via IPC',
           );
+          deps.onTasksChanged();
         } else {
           logger.warn(
             { taskId: data.taskId, sourceGroup },
@@ -429,6 +413,7 @@ export async function processTaskIpc(
             { taskId: data.taskId, sourceGroup },
             'Task cancelled via IPC',
           );
+          deps.onTasksChanged();
         } else {
           logger.warn(
             { taskId: data.taskId, sourceGroup },
@@ -499,6 +484,7 @@ export async function processTaskIpc(
           { taskId: data.taskId, sourceGroup, updates },
           'Task updated via IPC',
         );
+        deps.onTasksChanged();
       }
       break;
 
