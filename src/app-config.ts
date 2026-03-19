@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { logger } from './logger.js';
+import { MountAllowlist } from './types.js';
 
 interface AiEndpointConfig {
   endpoint?: string;
@@ -212,6 +213,11 @@ export interface AppConfig {
       };
     }
   >;
+  /**
+   * Mount allowlist — controls which host paths can be mounted into agent containers.
+   * If omitted, all additional mounts are blocked.
+   */
+  mountAllowlist?: MountAllowlist;
   /**
    * Agent run limits. Controls how long a container agent is allowed to run.
    */
