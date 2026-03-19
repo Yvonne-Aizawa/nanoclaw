@@ -522,9 +522,18 @@ export function startMcpRouter(): void {
       }
       if (inProcess) {
         // Reconstruct a readable from the buffered body so the MCP SDK can re-read it.
+        // rawHeaders and socket are required by @hono/node-server when converting to a Web Request.
+        const rawHeaders: string[] = [];
+        for (const [k, v] of Object.entries(req.headers)) {
+          if (Array.isArray(v)) {
+            for (const vi of v) { rawHeaders.push(k, vi); }
+          } else if (v !== undefined) {
+            rawHeaders.push(k, v);
+          }
+        }
         const fakeReq = Object.assign(
           body.length > 0 ? Readable.from([body]) : Readable.from([]),
-          { headers: req.headers, method: req.method, url: req.url },
+          { headers: req.headers, rawHeaders, method: req.method, url: req.url, socket: req.socket },
         ) as unknown as IncomingMessage;
         inProcess.handleRequest(fakeReq, res).catch((err) => {
           logger.error({ err, name }, 'In-process MCP handler error');
@@ -586,7 +595,10 @@ function startInProcessMcpServers(): void {
     logger.info('CalDAV MCP server started in-process');
   }
   if (email?.enabled && (email.imap || email.smtp)) {
-    inProcessHandlers.set('email', createEmailHandler({ imap: email.imap, smtp: email.smtp }));
+    inProcessHandlers.set(
+      'email',
+      createEmailHandler({ imap: email.imap, smtp: email.smtp }),
+    );
     logger.info('Email MCP server started in-process');
   }
   inProcessHandlers.set('utils', createUtilsHandler());
