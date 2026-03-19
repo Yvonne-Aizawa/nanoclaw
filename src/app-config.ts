@@ -125,6 +125,33 @@ export interface AppConfig {
       /** Restrict Ollama to these groups. Omit to allow all groups. */
       groups?: string[];
     };
+    /**
+     * Email integration via IMAP (read) and SMTP (send).
+     * Credentials stay in the host process — never visible to agent containers.
+     */
+    email?: {
+      enabled: boolean;
+      imap?: {
+        host: string;
+        port?: number;
+        /** Use TLS. Defaults to true. */
+        tls?: boolean;
+        username: string;
+        password: string;
+      };
+      smtp?: {
+        host: string;
+        port?: number;
+        /** Use TLS (port 465). False = STARTTLS (port 587). Defaults to false. */
+        secure?: boolean;
+        username: string;
+        password: string;
+        /** From header, e.g. "Alice <alice@example.com>" */
+        from: string;
+      };
+      /** Restrict email tools to these groups. Omit to allow all groups. */
+      groups?: string[];
+    };
   };
   /** Additional MCP servers to sandbox in containers. */
   mcp?: {

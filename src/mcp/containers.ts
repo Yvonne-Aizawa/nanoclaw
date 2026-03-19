@@ -23,6 +23,7 @@ import {
 import { logger } from '../logger.js';
 import { createBraveHandler, InProcessMcpHandler } from './brave.js';
 import { createCalDavHandler } from './caldav.js';
+import { createEmailHandler } from './email.js';
 import { createKanbanHandler } from './kanban.js';
 import { createObcHandler, hasObcToken } from './obc.js';
 import { createServiceHandler } from './service.js';
@@ -313,7 +314,12 @@ function logToolResponse(
           const data = JSON.parse(line.slice(6)) as Record<string, unknown>;
           if (data['id'] === rpcId && 'result' in data) {
             logger.info(
-              { audit: 'mcp_tool_response', server, rpcId, result: data['result'] },
+              {
+                audit: 'mcp_tool_response',
+                server,
+                rpcId,
+                result: data['result'],
+              },
               'MCP tool response',
             );
           }
@@ -335,14 +341,22 @@ function logToolResponse(
   const origEnd = res.end.bind(res);
   (res as any).end = (chunk?: unknown, ...args: unknown[]) => {
     if (isSSE) {
-      if (chunk) parseSseChunk(Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk));
+      if (chunk)
+        parseSseChunk(
+          Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk),
+        );
     } else if (chunk) {
       const text = Buffer.isBuffer(chunk) ? chunk.toString() : String(chunk);
       try {
         const data = JSON.parse(text) as Record<string, unknown>;
         if (data['id'] === rpcId && 'result' in data) {
           logger.info(
-            { audit: 'mcp_tool_response', server, rpcId, result: data['result'] },
+            {
+              audit: 'mcp_tool_response',
+              server,
+              rpcId,
+              result: data['result'],
+            },
             'MCP tool response',
           );
         }
@@ -468,14 +482,21 @@ export function startMcpRouter(): void {
     req.on('data', (chunk: Buffer) => bodyChunks.push(chunk));
     req.on('error', (err) => {
       logger.error({ err, name }, 'MCP router request read error');
-      if (!res.headersSent) { res.writeHead(400); res.end(); }
+      if (!res.headersSent) {
+        res.writeHead(400);
+        res.end();
+      }
     });
     req.on('end', () => {
       const body = Buffer.concat(bodyChunks);
 
       // Audit-log tools/call requests and wire up response logging.
       let rpc: Record<string, unknown> | null = null;
-      try { rpc = JSON.parse(body.toString()) as Record<string, unknown>; } catch { /* not JSON */ }
+      try {
+        rpc = JSON.parse(body.toString()) as Record<string, unknown>;
+      } catch {
+        /* not JSON */
+      }
       if (rpc?.['method'] === 'tools/call') {
         const params = rpc['params'] as Record<string, unknown> | undefined;
         logger.info(
@@ -548,7 +569,7 @@ export function stopMcpRouter(): void {
 
 function startInProcessMcpServers(): void {
   const { tools } = loadAppConfig();
-  const { brave, caldav } = tools ?? {};
+  const { brave, caldav, email } = tools ?? {};
   if (brave?.enabled && brave.token) {
     inProcessHandlers.set('brave', createBraveHandler(brave.token));
     logger.info('Brave MCP server started in-process');
@@ -563,6 +584,10 @@ function startInProcessMcpServers(): void {
       }),
     );
     logger.info('CalDAV MCP server started in-process');
+  }
+  if (email?.enabled && (email.imap || email.smtp)) {
+    inProcessHandlers.set('email', createEmailHandler({ imap: email.imap, smtp: email.smtp }));
+    logger.info('Email MCP server started in-process');
   }
   inProcessHandlers.set('utils', createUtilsHandler());
   logger.info('Utils MCP server started in-process');
@@ -648,7 +673,7 @@ export function getMcpServerUrls(groupFolder?: string): Array<{
 }> {
   const config = loadAppConfig();
   const { tools, mcp } = config;
-  const { brave, caldav, browser } = tools ?? {};
+  const { brave, caldav, browser, email } = tools ?? {};
   const allowlist = groupFolder
     ? config.group?.[groupFolder]?.mcp?.allowlist
     : undefined;
@@ -693,6 +718,9 @@ export function getMcpServerUrls(groupFolder?: string): Array<{
   }
   if (caldav?.enabled && caldav.url && allowed(caldav.groups)) {
     servers.push({ name: 'caldav', url: `${base}/caldav/mcp` });
+  }
+  if (email?.enabled && (email.imap || email.smtp) && allowed(email.groups)) {
+    servers.push({ name: 'email', url: `${base}/email/mcp` });
   }
   for (const srv of mcp?.servers ?? []) {
     if (!allowed(srv.groups)) continue;
